@@ -20,7 +20,7 @@ from dq.config import (
 )
 from dq.field_selection import select_fields
 from dq.reports import ReportError, write_empty_fields_report
-from dq.solr import SolrError, list_fields
+from dq.solr import SolrError, list_fields, missing_id_pages
 
 
 REPORT_NAMES = ("empty_fields", "term_stats", "code_points", "date_checker")
@@ -159,6 +159,12 @@ def print_fields(
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="dq",
+        usage="""%(prog)s --report NAME [NAME ...] [options]
+       %(prog)s --ids empty_fields [options]
+       %(prog)s --list_fields [options]
+       %(prog)s --write_config [options]
+       %(prog)s --help
+       %(prog)s --version""",
         allow_abbrev=False,
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description="""\
@@ -167,7 +173,10 @@ and OpenSearch indexes.
 
 Reports use Markdown so a run can produce multiple documents with links
 between summary and detail pages. Stored fields are included by default;
-include and exclude patterns will allow a run to focus on selected fields.""",
+include and exclude patterns will allow a run to focus on selected fields.
+
+Choose exactly one action below. Shared options configure the target and
+field selection; --ids requires exactly one selected stored field.""",
         epilog="""\
 Saved target configuration:
   dq.ini in the current directory or a parent directory
@@ -189,6 +198,11 @@ Report example:
 Report selection:
   --report and --reports are equivalent; both accept one or more names
 
+ID export (Solr, implemented):
+  dq --ids empty_fields --include_field file_name_s > missing-ids.txt
+  Select exactly one stored field. IDs go to stdout, diagnostics to stderr.
+  Uses the schema unique key and cursor paging, 1,000 IDs per batch.
+
 Field filtering examples (simple glob patterns, not regular expressions):
   --include_fields 'file_*' --include_fields 'content'
   --exclude_fields '*_vector' --exclude_fields '_*'
@@ -197,22 +211,28 @@ Project documentation:
   /Users/mbennett/Dropbox/dev/dq/README.md
 """,
     )
+    parser._optionals.title = "Options"
+    actions = parser.add_argument_group("Actions (choose one)")
     parser.add_argument(
         "--version",
         action="version",
         version=f"%(prog)s {__version__}",
     )
-    parser.add_argument(
+    actions.add_argument(
         "--report",
         "--reports",
         metavar="NAME",
-        action="extend",
+        action="append",
         nargs="+",
         choices=REPORT_NAMES,
         default=[],
         help="generate one or more named Markdown reports; repeatable",
     )
-    parser.add_argument(
+    actions.add_argument(
+        "--ids", "-id", choices=("empty_fields",), metavar="NAME",
+        help="stream missing-document IDs for exactly one selected stored field; no report file",
+    )
+    actions.add_argument(
         "--list_fields",
         "--list-fields",
         action="store_true",
@@ -255,7 +275,7 @@ Project documentation:
         metavar="FILE",
         help="read existing FILE; with --write_config, create or update FILE",
     )
-    parser.add_argument(
+    actions.add_argument(
         "--write_config",
         "--write-config",
         action="store_true",
@@ -268,11 +288,52 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     arguments = list(argv) if argv is not None else sys.argv[1:]
     options = parser.parse_args(arguments)
+    options.report = [name for group in options.report for name in group]
     action_count = sum(
-        (bool(options.write_config), bool(options.list_fields), bool(options.report))
+        (bool(options.write_config), bool(options.list_fields), bool(options.report), bool(options.ids))
     )
     if action_count > 1:
-        parser.error("choose only one action: --report, --list_fields, or --write_config")
+        parser.error("choose only one action: --report, --ids, --list_fields, or --write_config")
+    if options.ids:
+        written = 0
+        try:
+            config = load_config(options.config)
+            target = collection_url(config, main_url=options.main_url, collection=options.collection)
+            fields = select_fields(
+                list_fields(target, include_counts=False),
+                include=options.include_fields, exclude=options.exclude_fields,
+            )
+            if len(fields) != 1:
+                names = ", ".join(str(field["name"]) for field in fields) or "none"
+                raise SolrError(
+                    f"--ids empty_fields requires exactly one field; matched {len(fields)}: {names}; "
+                    "narrow --include_field/--exclude_field"
+                )
+            field = fields[0]
+            if field.get("stored") is not True:
+                raise SolrError(f"--ids empty_fields requires a stored field: {field['name']}")
+            print(f"Solr collection: {target}; missing field: {field['name']}", file=sys.stderr)
+            if config.source:
+                source = "specified by --config" if options.config else "default configuration"
+                print(f"Configuration: {config.source} ({source})", file=sys.stderr)
+            for ids in missing_id_pages(target, str(field["name"])):
+                for value in ids:
+                    print(value)
+                sys.stdout.flush()
+                written += len(ids)
+                if sys.stderr.isatty():
+                    print(f"\rExported {written:,} IDs", end="", file=sys.stderr, flush=True)
+            print(f"\nCompleted: {written:,} IDs exported.", file=sys.stderr)
+        except BrokenPipeError:
+            # Prevent a second broken-pipe exception when Python flushes at exit.
+            with open(os.devnull, "w") as sink:
+                os.dup2(sink.fileno(), sys.stdout.fileno())
+            return 0
+        except (ConfigError, SolrError, OSError) as error:
+            parser.exit(2, f"\ndq: error: {error}; export incomplete ({written:,} IDs written)\n")
+        except KeyboardInterrupt:
+            parser.exit(130, f"\ndq: interrupted; export incomplete ({written:,} IDs written)\n")
+        return 0
     if options.write_config:
         try:
             output_path = (
@@ -371,5 +432,5 @@ def main(argv: Sequence[str] | None = None) -> int:
         2,
         f"dq: error: target resolves to {target}{configuration_detail}, "
         "but no action was selected; "
-        "use --report NAME, --list_fields, or --write_config\n",
+        "use --report NAME, --ids empty_fields, --list_fields, or --write_config\n",
     )

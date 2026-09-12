@@ -29,7 +29,15 @@ Requirements and dependencies
 
 Required software:
 
-* Python 3.11 or newer
+* Python 3.7 or newer
+
+Python 3.7 is the minimum because the code uses dataclasses and postponed
+type annotations. The CLI tests and a live Solr report have been checked with
+Python 3.7.9. To test with this machine's separate Python 3.7 installation
+without changing the default interpreter:
+
+    /Library/Frameworks/Python.framework/Versions/3.7/bin/python3 bin/dq --version
+    PYTHONPATH=src /Library/Frameworks/Python.framework/Versions/3.7/bin/python3 -m unittest discover -s tests
 
 Runtime Python dependencies:
 
@@ -37,7 +45,7 @@ Runtime Python dependencies:
 
 Build dependencies, installed automatically by pip when building:
 
-* setuptools 68 or newer
+* setuptools 61 or newer
 
 Development dependencies:
 
@@ -47,7 +55,40 @@ No Java, SolrJ, Rust, Node.js, Docker, or native Python extension is required
 to run the CLI. A reachable Solr, Elasticsearch, or OpenSearch server is needed
 to perform a report.
 
-Development installation
+Run directly from the project
+-----------------------------
+
+No package installation is needed. With Python 3.7 or newer available as
+``python3``, run the executable launcher:
+
+    cd /Users/mbennett/Dropbox/dev/dq
+    ./bin/verify-python
+    ./bin/dq --help
+    ./bin/dq --version
+
+``bin/verify-python`` checks the same ``python3`` on PATH used by ``bin/dq``.
+It reports the interpreter path and version, requires Python 3.7 or newer,
+checks HTTPS support, and verifies that this checkout's DQ CLI loads. It exits
+with status 0 on success or a nonzero status on failure, with errors on stderr.
+It does not install software, change your environment, or contact Solr.
+
+To use ``dq`` from any directory, add this project's ``bin`` directory to PATH:
+
+    export PATH="/Users/mbennett/Dropbox/dev/dq/bin:$PATH"
+    hash -r
+    command -v dq
+    dq --version
+
+Add the export line to your shell startup file to retain it in new terminals
+(for example, ``~/.bash_profile`` for a Bash login shell or ``~/.zshrc`` for
+Zsh). For a checkout elsewhere, substitute its path. Putting it first in PATH
+selects this checkout ahead of a previously installed ``dq`` command.
+
+The launcher loads code directly from this checkout and preserves the current
+working directory for config lookup and report output. It uses the ``python3``
+found on PATH, including an activated virtual environment.
+
+Optional development installation
 ------------------------
 
     cd /Users/mbennett/Dropbox/dev/dq
@@ -63,9 +104,20 @@ Run without arguments to display detailed usage and the command roadmap:
 
     dq
 
+The usage synopsis shows each action separately:
+
+    dq --report NAME [NAME ...] [options]
+    dq --ids empty_fields [options]
+    dq --list_fields [options]
+    dq --write_config [options]
+    dq --help
+    dq --version
+
+Choose one action and add shared target or field-filter options as needed.
+
 DQ then validates the target in order: first ``main_url``, then the collection
 or index. If both resolve from ``dq.ini`` or another source, it explicitly says
-that no action was selected and asks for ``--report NAME``, ``--list_fields``,
+that no action was selected and asks for ``--report NAME``, ``--ids empty_fields``, ``--list_fields``,
 or ``--write_config``. This makes a missing target distinguishable from a
 missing action.
 
@@ -97,20 +149,52 @@ The empty-fields report examines selected stored fields and writes
 
     dq --report empty_fields
 
-Its ``Options used`` section records each effective option and whether it came
+Its ``Options Used`` section records each effective option and whether it came
 from the command line, an environment variable, an explicitly named
 configuration file, the default configuration file, a value embedded in
 ``main_url``, or a built-in default. Its summary shows the collection document
 count, effective include and exclude patterns, stored fields checked, and
-number of incomplete fields. Its linked detail section lists each incomplete
+number of incomplete fields. Its linked ``Fields`` section lists each incomplete
 field's populated-document count, missing-document count, and percentage. A
 missing value means Solr did not detect that field in the document; an indexed
 empty string may still count as present.
+
+``Options Used`` and ``Fields`` use Markdown pipe tables, with spaces padding
+each column so the source also lines up in a fixed-width editor such as vi.
+The summary appears first, followed by options and fields.
 
 When DQ reads a configuration file, it includes that file's path in the report
 summary and the ``--list_fields`` heading. The path is labeled ``default
 configuration`` or ``specified by --config``. A missing-action diagnostic
 identifies the file the same way.
+
+### Export IDs for an empty field
+
+To export the unique keys of documents missing one stored field:
+
+    dq --ids empty_fields --include_field file_name_s > missing-file-name.txt
+
+This is a separate action from ``--report``. It creates no Markdown file and
+accepts ``-id`` as an alias for the canonical ``--ids`` option. It
+prints only one ID per line to stdout. Configuration details, progress (when
+stderr is a terminal), completion counts, and errors go to stderr.
+Use ``--include_field[s]`` and ``--exclude_field[s]`` with the usual simple glob
+patterns. They must select exactly one stored field; otherwise DQ lists the
+matching fields and exits with an error. ``--ids`` cannot be combined with
+``--report``, ``--list_fields``, or ``--write_config``.
+
+DQ discovers the schema's unique key instead of assuming it is named ``id``.
+It requests only that field, sorted by the unique key, using Solr ``cursorMark``
+paging in batches of 1,000. Each batch is flushed to stdout, so memory does not
+grow with the total result count. No matches produces empty stdout and success.
+IDs containing line breaks are rejected to preserve the one-ID-per-line format.
+
+Missing means ``exists(field)`` is false, consistent with the report's field
+existence check; it is not a direct inspection of null stored values.
+Cursor paging is not a snapshot: avoid indexing or deleting during an export
+when you need a consistent result. Partial Solr responses and request failures
+stop the export with a nonzero exit status; any output already written is
+incomplete. Check the exit status before using a redirected file.
 
 List the fields in a Solr collection:
 

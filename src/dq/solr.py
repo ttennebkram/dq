@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from fnmatch import fnmatchcase
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -32,6 +33,8 @@ def get_json(collection_url: str, path: str, **parameters: object) -> dict[str, 
         raise SolrError(message) from error
     except URLError as error:
         raise SolrError(f"Could not connect to {url}: {error.reason}") from error
+    except OSError as error:
+        raise SolrError(f"Could not read {url}: {error}") from error
     except (json.JSONDecodeError, UnicodeDecodeError) as error:
         raise SolrError(f"Solr returned an invalid JSON response from {url}") from error
 
@@ -66,7 +69,7 @@ def collection_document_count(collection_url: str) -> int:
     return count
 
 
-def list_fields(collection_url: str) -> list[dict[str, Any]]:
+def list_fields(collection_url: str, *, include_counts: bool = True) -> list[dict[str, Any]]:
     """Return concrete index fields enriched with their schema properties."""
     schema_response = get_json(
         collection_url,
@@ -108,8 +111,52 @@ def list_fields(collection_url: str) -> list[dict[str, Any]]:
         if isinstance(luke_properties, dict):
             field["documents"] = luke_properties.get("docs", "")
             field.setdefault("type", luke_properties.get("type", ""))
-        if field.get("documents", "") == "":
+        if include_counts and field.get("documents", "") == "":
             field["documents"] = field_document_count(collection_url, name)
         result.append(field)
 
     return sorted(result, key=lambda field: str(field.get("name", "")))
+
+
+def missing_id_pages(
+    collection_url: str, field_name: str, *, page_size: int = 1000
+) -> Iterator[list[str]]:
+    """Yield bounded pages of unique keys for documents where exists(field) is false."""
+    if page_size < 1:
+        raise ValueError("page_size must be positive")
+    key = get_json(collection_url, "schema/uniquekey", wt="json").get("uniqueKey")
+    if not isinstance(key, str) or not key:
+        raise SolrError("Solr schema has no unique key; cannot export IDs")
+    cursor = "*"
+    while True:
+        page = get_json(
+            collection_url, "select", q="*:*",
+            fq="{!frange l=0 u=0}exists($dq_field)", dq_field=field_name,
+            fl=key, sort=f"{key} asc", rows=page_size, cursorMark=cursor,
+            wt="json", omitHeader="false", **{"shards.tolerant": "false"},
+        )
+        header = page.get("responseHeader", {})
+        if header.get("partialResults") not in (None, False, "false"):
+            raise SolrError("Solr returned partial results; ID export is incomplete")
+        if header.get("status", 0) != 0 or "error" in page:
+            raise SolrError("Solr returned an error; ID export is incomplete")
+        result = page.get("response")
+        docs = result.get("docs") if isinstance(result, dict) else None
+        next_cursor = page.get("nextCursorMark")
+        if not isinstance(docs, list) or not isinstance(next_cursor, str):
+            raise SolrError("Solr response is missing documents or nextCursorMark; ID export is incomplete")
+        ids = []
+        for doc in docs:
+            value = doc.get(key) if isinstance(doc, dict) else None
+            if isinstance(value, bool) or not isinstance(value, (str, int, float)):
+                raise SolrError(f"Document has no usable unique key {key!r}; ID export is incomplete")
+            value = str(value)
+            if "\n" in value or "\r" in value:
+                raise SolrError("An ID contains a line break and cannot be exported one per line")
+            ids.append(value)
+        if next_cursor == cursor:
+            if ids:
+                raise SolrError("Solr cursor did not advance despite returning IDs; export is incomplete")
+            return
+        yield ids
+        cursor = next_cursor

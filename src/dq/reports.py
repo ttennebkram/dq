@@ -24,6 +24,21 @@ def _code(value: str) -> str:
     return f"`` {value} ``" if "`" in value else f"`{value}`"
 
 
+def _table(headers: Sequence[str], rows: Sequence[Sequence[str]]) -> list[str]:
+    """Render pipe tables with columns padded for reading the Markdown source."""
+    cells = [
+        [cell.replace("\r", " ").replace("\n", " ").replace("|", "\\|") for cell in row]
+        for row in [headers, *rows]
+    ]
+    widths = [max(3, *(len(row[i]) for row in cells)) for i in range(len(headers))]
+
+    def render(row: Sequence[str]) -> str:
+        return "| " + " | ".join(cell.ljust(width) for cell, width in zip(row, widths)) + " |"
+
+    return [render(cells[0]), render(["-" * width for width in widths]),
+            *(render(row) for row in cells[1:])]
+
+
 def _write_text(path: Path, contents: str) -> None:
     temporary_path = path.with_name(f".{path.name}.tmp")
     try:
@@ -32,7 +47,7 @@ def _write_text(path: Path, contents: str) -> None:
         temporary_path.replace(path)
     except OSError as error:
         try:
-            temporary_path.unlink(missing_ok=True)
+            temporary_path.unlink()
         except OSError:
             pass
         raise ReportError(f"could not write report {path}: {error}") from error
@@ -68,8 +83,8 @@ def write_empty_fields_report(
         "# Empty Fields Report",
         "",
         "- [Summary](#summary)",
-        "- [Options used](#options-used)",
-        "- [Incomplete fields](#incomplete-fields)",
+        "- [Options Used](#options-used)",
+        "- [Fields](#fields)",
         "",
         "## Summary",
         "",
@@ -89,25 +104,29 @@ def write_empty_fields_report(
         f"- Stored fields checked: {len(stored_fields):,}",
         f"- Incomplete stored fields: {len(incomplete):,}",
         "",
-        "## Options used",
+        "## Options Used",
         "",
-        *(
-            f"- **{_code(name)}:** {_code(value)}; source: {source}"
-            for name, value, source in option_details
+        *_table(
+            ("Option", "Value", "Source"),
+            [(_code(name), _code(value), source) for name, value, source in option_details],
         ),
         "",
-        "## Incomplete fields",
+        "## Fields",
         "",
     ]
     if incomplete:
+        rows = []
         for field, populated, missing in incomplete:
             percentage = (populated / total_documents * 100) if total_documents else 0.0
-            lines.append(
-                f"- **{_code(str(field.get('name', '')))}** "
-                f"({_code(str(field.get('type', '')))}): "
-                f"{populated:,} documents with a value; {missing:,} missing; "
-                f"{percentage:.2f}% populated"
-            )
+            rows.append((
+                _code(str(field.get('name', ''))),
+                _code(str(field.get('type', ''))),
+                f"{populated:,}", f"{missing:,}", f"{percentage:.2f}%",
+            ))
+        lines.extend(_table(
+            ("Field", "Type", "Documents with a value", "Missing documents", "Populated"),
+            rows,
+        ))
     else:
         lines.append("All selected stored fields are populated in every document.")
     lines.extend(

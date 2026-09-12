@@ -136,7 +136,7 @@ def write_config(path: Path, main_url: str, collection: str | None) -> None:
         temporary_path.replace(path)
     except OSError as error:
         try:
-            temporary_path.unlink(missing_ok=True)
+            temporary_path.unlink()
         except OSError:
             pass
         raise ConfigError(f"could not write configuration {path}: {error}") from error

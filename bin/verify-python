@@ -1,0 +1,42 @@
+#!/bin/sh
+# Check the same python3 on PATH used by bin/dq, even when Python is missing.
+if ! command -v python3 >/dev/null 2>&1; then
+    echo "FAIL: python3 was not found on PATH. Install Python 3.7 or newer and ensure python3 is on PATH." >&2
+    exit 1
+fi
+
+exec python3 -B - "$0" "$@" <<'PY'
+import sys
+
+if len(sys.argv) > 2:
+    print("Usage: verify-python (no arguments)", file=sys.stderr)
+    sys.exit(2)
+
+print("Python executable: " + sys.executable)
+print("Python version: " + sys.version.split()[0])
+if sys.version_info < (3, 7):
+    print("FAIL: DQ requires Python 3.7 or newer. Update python3 on PATH or activate a suitable virtual environment.", file=sys.stderr)
+    sys.exit(1)
+
+try:
+    from pathlib import Path
+    import ssl
+
+    project = Path(sys.argv[1]).resolve().parents[1]
+    source = project / "src"
+    if not (source / "dq" / "cli.py").is_file():
+        raise RuntimeError("DQ source is missing: keep bin/verify-python inside the project checkout")
+    sys.path.insert(0, str(source))
+    from dq import __version__
+    from dq.cli import build_parser
+
+    build_parser()
+except Exception as error:
+    print("FAIL: Cannot load DQ: " + str(error), file=sys.stderr)
+    sys.exit(1)
+
+print("DQ checkout: " + str(project))
+print("DQ version: " + __version__)
+print("HTTPS support: " + ssl.OPENSSL_VERSION)
+print("PASS: Python meets DQ's requirements and the CLI loads successfully.")
+PY
