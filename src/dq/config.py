@@ -1,11 +1,7 @@
 """Configuration discovery and target URL construction for DQ."""
-
-from __future__ import annotations
-
 import configparser
 import os
-from dataclasses import dataclass
-from pathlib import Path
+from dq.files import absolute_path, write_text
 from urllib.parse import quote, unquote, urlsplit
 
 
@@ -13,130 +9,102 @@ class ConfigError(ValueError):
     """The DQ configuration is missing or invalid."""
 
 
-@dataclass(frozen=True)
 class DqConfig:
-    main_url: str | None = None
-    collection: str | None = None
-    source: Path | None = None
+    """Resolved target settings and the file they came from."""
+
+    def __init__(self, main_url=None, collection=None, source=None):
+        self.main_url = main_url
+        self.collection = collection
+        self.source = source
 
 
-def _project_config(start: Path) -> Path | None:
-    directory = start.resolve()
-    for candidate_directory in (directory, *directory.parents):
-        candidate = candidate_directory / "dq.ini"
-        if candidate.is_file():
+def _project_config(start):
+    directory = absolute_path(start)
+    while True:
+        candidate = os.path.join(directory, 'dq.ini')
+        if os.path.isfile(candidate):
             return candidate
-    return None
+        parent = os.path.dirname(directory)
+        if parent == directory:
+            return None
+        directory = parent
 
 
-def _read_config(path: Path) -> DqConfig:
-    parser = configparser.ConfigParser()
+def _read_config(path):
+    parser = configparser.ConfigParser(interpolation=None)
     try:
-        with path.open(encoding="utf-8") as stream:
+        with open(str(path), encoding='utf-8') as stream:
             parser.read_file(stream)
     except (OSError, configparser.Error) as error:
-        raise ConfigError(f"could not read configuration {path}: {error}") from error
-
+        raise ConfigError('could not read configuration {0}; check file access and INI syntax'.format(path)) from error
     values = dict(parser.defaults())
-    if parser.has_section("dq"):
-        values.update(parser["dq"])
-    return DqConfig(
-        main_url=values.get("main_url"),
-        collection=values.get("collection"),
-        source=path,
-    )
+    if parser.has_section('dq'):
+        values.update(parser.items('dq'))
+    return DqConfig(main_url=values.get('main_url'),
+                    collection=values.get('collection'), source=absolute_path(path))
 
 
-def load_config(explicit_path: str | None = None, start: Path | None = None) -> DqConfig:
+def load_config(explicit_path=None, start=None):
     """Load explicit, project, or user configuration and apply environment values."""
-    path: Path | None
     if explicit_path:
-        path = Path(explicit_path).expanduser()
-        if not path.is_file():
-            raise ConfigError(f"configuration file does not exist: {path}")
+        path = os.path.expanduser(str(explicit_path))
+        if not os.path.isfile(path):
+            raise ConfigError('configuration file does not exist: {0}'.format(path))
     else:
-        path = _project_config(start or Path.cwd())
+        path = _project_config(start or os.getcwd())
         if path is None:
-            user_path = Path.home() / ".config" / "dq" / "config.ini"
-            path = user_path if user_path.is_file() else None
-
+            user_path = os.path.expanduser('~/.config/dq/config.ini')
+            path = user_path if os.path.isfile(user_path) else None
     config = _read_config(path) if path else DqConfig()
     if explicit_path:
         return config
-    return DqConfig(
-        main_url=os.environ.get("DQ_MAIN_URL", config.main_url),
-        collection=os.environ.get("DQ_COLLECTION", config.collection),
-        source=config.source,
-    )
+    return DqConfig(main_url=os.environ.get('DQ_MAIN_URL', config.main_url), collection=os.environ.get(
+        'DQ_COLLECTION', config.collection), source=config.source)
 
 
-def collection_url(
-    config: DqConfig,
-    *,
-    main_url: str | None = None,
-    collection: str | None = None,
-) -> str:
+def collection_url(config, *, main_url=None, collection=None):
     """Resolve a complete collection URL from command-line and saved values."""
     resolved_main_url = main_url or config.main_url
     if not resolved_main_url:
-        raise ConfigError(
-            "main_url is required; use --main_url, DQ_MAIN_URL, or a dq.ini file"
-        )
-    normalized_url = resolved_main_url.rstrip("/")
-    path_parts = [unquote(part) for part in urlsplit(normalized_url).path.split("/") if part]
-    has_collection_path = bool(path_parts) and path_parts != ["solr"]
+        raise ConfigError('main_url is required; use --main_url, DQ_MAIN_URL, or a dq.ini file')
+    normalized_url = resolved_main_url.rstrip('/')
+    path_parts = [unquote(part) for part in urlsplit(normalized_url).path.split('/') if part]
+    has_collection_path = bool(path_parts) and path_parts != ['solr']
     if has_collection_path:
         collection_was_also_declared = collection is not None or (
-            main_url is None and config.collection is not None
-        )
+            main_url is None and config.collection is not None)
         if collection_was_also_declared:
             raise ConfigError(
-                "main_url already includes a collection or index; remove "
-                "--collection/--index or the collection setting from dq.ini"
-            )
+                'main_url already includes a collection or index; remove --collection/--index or the collection setting from dq.ini')
         return normalized_url
-
     resolved_collection = collection or config.collection
     if not resolved_collection:
         raise ConfigError(
-            "collection is not present in main_url; use --collection, "
-            "DQ_COLLECTION, or a dq.ini file"
-        )
-    collection_path = quote(resolved_collection.strip("/"), safe="")
-    return f"{normalized_url}/{collection_path}"
+            'collection is not present in main_url; use --collection, DQ_COLLECTION, or a dq.ini file')
+    collection_path = quote(resolved_collection.strip('/'), safe='')
+    return '{0}/{1}'.format(normalized_url, collection_path)
 
 
-def main_url_has_collection(main_url: str) -> bool:
+def main_url_has_collection(main_url):
     """Return whether a URL path appears to include a collection or index."""
-    path_parts = [unquote(part) for part in urlsplit(main_url.rstrip("/")).path.split("/") if part]
-    return bool(path_parts) and path_parts != ["solr"]
+    path_parts = [unquote(part) for part in urlsplit(main_url.rstrip('/')).path.split('/') if part]
+    return bool(path_parts) and path_parts != ['solr']
 
 
-def write_config(path: Path, main_url: str, collection: str | None) -> None:
+def write_config(path, main_url, collection):
     """Atomically update target settings, commenting out changed old values."""
-    normalized_main_url = main_url.rstrip("/")
-    previous = _read_config(path) if path.is_file() else DqConfig()
-
-    lines = ["[DEFAULT]"]
+    normalized_main_url = main_url.rstrip('/')
+    previous = _read_config(path) if os.path.isfile(path) else DqConfig()
+    lines = ['[DEFAULT]']
     if previous.main_url and previous.main_url != normalized_main_url:
-        lines.append(f"# Previous main_url = {previous.main_url}")
-    lines.append(f"main_url = {normalized_main_url}")
-
+        lines.append('# Previous main_url = {0}'.format(previous.main_url))
+    lines.append('main_url = {0}'.format(normalized_main_url))
     if previous.collection and previous.collection != collection:
-        lines.append(f"# Previous collection = {previous.collection}")
+        lines.append('# Previous collection = {0}'.format(previous.collection))
     if collection:
-        lines.append(f"collection = {collection}")
-    contents = "\n".join(lines) + "\n"
-
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary_path = path.with_name(f".{path.name}.tmp")
+        lines.append('collection = {0}'.format(collection))
+    contents = '\n'.join(lines) + '\n'
     try:
-        with temporary_path.open("w", encoding="utf-8") as stream:
-            stream.write(contents)
-        temporary_path.replace(path)
+        write_text(path, contents)
     except OSError as error:
-        try:
-            temporary_path.unlink()
-        except OSError:
-            pass
-        raise ConfigError(f"could not write configuration {path}: {error}") from error
+        raise ConfigError('could not write configuration {0}: {1}'.format(path, error)) from error

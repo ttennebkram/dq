@@ -2,12 +2,34 @@
 
 import contextlib
 import io
+import os
 import unittest
+import sys
 from unittest.mock import patch
 
 from dq.cli import build_parser, main
 from dq.config import DqConfig
 from dq.solr import SolrError, missing_id_pages
+
+
+@contextlib.contextmanager
+def redirect_stdout(stream):
+    old = sys.stdout
+    sys.stdout = stream
+    try:
+        yield stream
+    finally:
+        sys.stdout = old
+
+
+@contextlib.contextmanager
+def redirect_stderr(stream):
+    old = sys.stderr
+    sys.stderr = stream
+    try:
+        yield stream
+    finally:
+        sys.stderr = old
 
 
 def page(ids, cursor, **header):
@@ -63,9 +85,10 @@ class CliTests(unittest.TestCase):
         with patch("dq.cli.load_config", return_value=DqConfig()), \
              patch("dq.cli.collection_url", return_value="http://solr/c"), \
              patch("dq.cli.write_empty_fields_report") as write, \
-             contextlib.redirect_stdout(io.StringIO()):
+             redirect_stdout(io.StringIO()):
             self.assertEqual(main(["--report", "empty_fields", "empty_fields",
                                    "--reports", "empty_fields"]), 0)
+        self.assertEqual(os.path.basename(write.call_args[0][1]), "empty_fields.md")
         details = write.call_args[1]["option_details"]
         self.assertEqual(details[0][1], "empty_fields, empty_fields, empty_fields")
 
@@ -76,10 +99,10 @@ class CliTests(unittest.TestCase):
     def test_action_conflict_is_rejected_before_network(self):
         for other in (["--report", "empty_fields"], ["--list_fields"], ["--write_config"]):
             with self.subTest(other=other), patch("dq.cli.load_config") as load, \
-                 contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
-                main(["--ids", "empty_fields", *other])
+                 redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
+                main(["--ids", "empty_fields"] + other)
             self.assertEqual(error.exception.code, 2)
-            load.assert_not_called()
+            self.assertFalse(load.called)
 
     def run_export(self, fields, pages):
         stdout, stderr = io.StringIO(), io.StringIO()
@@ -87,7 +110,7 @@ class CliTests(unittest.TestCase):
              patch("dq.cli.collection_url", return_value="http://solr/c"), \
              patch("dq.cli.list_fields", return_value=fields), \
              patch("dq.cli.missing_id_pages", return_value=iter(pages)) as fetch, \
-             contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+             redirect_stdout(stdout), redirect_stderr(stderr):
             try:
                 status = main(["--ids", "empty_fields"])
             except SystemExit as error:
@@ -107,7 +130,7 @@ class CliTests(unittest.TestCase):
                 self.assertEqual(status, 2)
                 self.assertEqual(out, "")
                 self.assertIn("dq: error:", err)
-                fetch.assert_not_called()
+                self.assertFalse(fetch.called)
 
 
 if __name__ == "__main__":

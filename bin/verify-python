@@ -1,30 +1,37 @@
 #!/bin/sh
 # Check the same python3 on PATH used by bin/dq, even when Python is missing.
-if ! command -v python3 >/dev/null 2>&1; then
-    echo "FAIL: python3 was not found on PATH. Install Python 3.7 or newer and ensure python3 is on PATH." >&2
+if [ "$#" -eq 1 ] && { [ "$1" = "--help" ] || [ "$1" = "-h" ]; }; then
+    echo "Usage: verify-python"
+    echo "Checks python3 on PATH, the same interpreter used by bin/dq."
+    exit 0
+fi
+if [ "$#" -ne 0 ]; then
+    echo "Usage: verify-python (no arguments; checks python3 on PATH)" >&2
+    exit 2
+fi
+dq_python_command="python3"
+if ! command -v "$dq_python_command" >/dev/null 2>&1; then
+    echo "FAIL: $dq_python_command was not found. Use Python 3.4.10 or newer." >&2
     exit 1
 fi
 
-exec python3 -B - "$0" "$@" <<'PY'
-import sys
+exec "$dq_python_command" -B - "$0" <<'PY'
 
-if len(sys.argv) > 2:
-    print("Usage: verify-python (no arguments)", file=sys.stderr)
-    sys.exit(2)
+import sys
 
 print("Python executable: " + sys.executable)
 print("Python version: " + sys.version.split()[0])
-if sys.version_info < (3, 7):
-    print("FAIL: DQ requires Python 3.7 or newer. Update python3 on PATH or activate a suitable virtual environment.", file=sys.stderr)
+if sys.version_info < (3, 4, 10):
+    print("FAIL: DQ requires Python 3.4.10 or newer. Update python3 on PATH or activate a suitable virtual environment.", file=sys.stderr)
     sys.exit(1)
 
 try:
-    from pathlib import Path
+    import os
     import ssl
 
-    project = Path(sys.argv[1]).resolve().parents[1]
-    source = project / "src"
-    if not (source / "dq" / "cli.py").is_file():
+    project = os.path.dirname(os.path.dirname(os.path.realpath(sys.argv[1])))
+    source = os.path.join(project, "src")
+    if not os.path.isfile(os.path.join(source, "dq", "cli.py")):
         raise RuntimeError("DQ source is missing: keep bin/verify-python inside the project checkout")
     sys.path.insert(0, str(source))
     from dq import __version__

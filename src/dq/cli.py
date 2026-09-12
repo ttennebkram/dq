@@ -1,163 +1,108 @@
 """Command-line entry point for DQ2."""
-
-from __future__ import annotations
-
 import argparse
 import os
 import sys
-from collections.abc import Sequence
-from pathlib import Path
+from dq.files import absolute_path
 from urllib.parse import unquote, urlsplit
-
 from dq import __version__
-from dq.config import (
-    ConfigError,
-    DqConfig,
-    collection_url,
-    load_config,
-    main_url_has_collection,
-    write_config,
-)
+from dq.config import ConfigError, DqConfig, collection_url, load_config, main_url_has_collection, write_config
 from dq.field_selection import select_fields
 from dq.reports import ReportError, write_empty_fields_report
 from dq.solr import SolrError, list_fields, missing_id_pages
+REPORT_NAMES = ('empty_fields', 'term_stats', 'code_points', 'date_checker')
 
 
-REPORT_NAMES = ("empty_fields", "term_stats", "code_points", "date_checker")
+def _yes_no(value):
+    return 'yes' if value is True else 'no'
 
 
-def _yes_no(value: object) -> str:
-    return "yes" if value is True else "no"
-
-
-def _configured_value_source(
-    *,
-    command_line_value: object,
-    environment_name: str,
-    config: DqConfig,
-    explicit_config: bool,
-) -> str:
+def _configured_value_source(*, command_line_value, environment_name, config, explicit_config):
     if command_line_value is not None:
-        return "command line"
+        return 'command line'
     if explicit_config:
-        return f"configuration file {config.source} specified by --config"
+        return 'configuration file {0} specified by --config'.format(config.source)
     if environment_name in os.environ:
-        return f"environment variable {environment_name}"
+        return 'environment variable {0}'.format(environment_name)
     if config.source is not None:
-        return f"default configuration file {config.source}"
-    return "not set"
+        return 'default configuration file {0}'.format(config.source)
+    return 'not set'
 
 
-def _report_option_details(
-    options: argparse.Namespace,
-    config: DqConfig,
-    target: str,
-    output_path: Path,
-) -> list[tuple[str, str, str]]:
-    main_url = options.main_url or config.main_url or ""
+def _report_option_details(options, config, target, output_path):
+    main_url = options.main_url or config.main_url or ''
     main_url_source = _configured_value_source(
-        command_line_value=options.main_url,
-        environment_name="DQ_MAIN_URL",
-        config=config,
-        explicit_config=bool(options.config),
-    )
+        command_line_value=options.main_url, environment_name='DQ_MAIN_URL', config=config, explicit_config=bool(options.config))
     if main_url_has_collection(main_url):
-        path_parts = [
-            unquote(part) for part in urlsplit(target).path.split("/") if part
-        ]
+        path_parts = [unquote(part) for part in urlsplit(target).path.split('/') if part]
         collection = path_parts[-1]
-        collection_source = f"included in main_url from {main_url_source}"
+        collection_source = 'included in main_url from {0}'.format(main_url_source)
     else:
-        collection = options.collection or config.collection or ""
+        collection = options.collection or config.collection or ''
         collection_source = _configured_value_source(
-            command_line_value=options.collection,
-            environment_name="DQ_COLLECTION",
-            config=config,
-            explicit_config=bool(options.config),
-        )
-
+            command_line_value=options.collection, environment_name='DQ_COLLECTION', config=config, explicit_config=bool(options.config))
     if config.source is None:
-        configuration_value = "none"
-        configuration_source = "no configuration file read"
+        configuration_value = 'none'
+        configuration_source = 'no configuration file read'
     elif options.config:
         configuration_value = str(config.source)
-        configuration_source = "specified by --config"
+        configuration_source = 'specified by --config'
     else:
         configuration_value = str(config.source)
-        configuration_source = "default configuration lookup"
-
-    include_value = ", ".join(options.include_fields) or "all fields"
-    include_source = "command line" if options.include_fields else "built-in default"
+        configuration_source = 'default configuration lookup'
+    include_value = ', '.join(options.include_fields) or 'all fields'
+    include_source = 'command line' if options.include_fields else 'built-in default'
     if options.exclude_fields:
-        exclude_value = ", ".join(options.exclude_fields)
-        exclude_source = "command line"
+        exclude_value = ', '.join(options.exclude_fields)
+        exclude_source = 'command line'
     elif options.include_fields:
-        exclude_value = "none"
-        exclude_source = "built-in default with explicit field filters"
+        exclude_value = 'none'
+        exclude_source = 'built-in default with explicit field filters'
     else:
-        exclude_value = "_*_"
-        exclude_source = "built-in default"
-
-    return [
-        ("report", ", ".join(options.report), "command line --report/--reports"),
-        ("main_url", main_url, main_url_source),
-        ("collection/index", collection, collection_source),
-        ("configuration file", configuration_value, configuration_source),
-        ("include_fields", include_value, include_source),
-        ("exclude_fields", exclude_value, exclude_source),
-        ("output file", str(output_path), "built-in default"),
+        exclude_value = '_*_'
+        exclude_source = 'built-in default'
+    details = [
+        ('report', ', '.join(options.report), 'command line --report/--reports'),
+        ('main_url', main_url, main_url_source),
+        ('collection/index', collection, collection_source),
+        ('configuration file', configuration_value, configuration_source),
+        ('include_fields', include_value, include_source),
+        ('exclude_fields', exclude_value, exclude_source),
+        ('output file', str(output_path), 'built-in default'),
     ]
+    return details
 
 
-def print_fields(
-    target: str,
-    *,
-    include: Sequence[str] = (),
-    exclude: Sequence[str] = (),
-    configuration_path: Path | None = None,
-    configuration_explicit: bool = False,
-) -> None:
+
+def print_fields(target, *, include=(), exclude=(), configuration_path=None,
+                 configuration_explicit=False):
     fields = select_fields(list_fields(target), include=include, exclude=exclude)
-    columns = (
-        ("FIELD", "name"),
-        ("TYPE", "type"),
-        ("STORED", "stored"),
-        ("INDEXED", "indexed"),
-        ("DOC VALUES", "docValues"),
-        ("MULTI VALUED", "multiValued"),
-        ("DOCUMENTS", "documents"),
-        ("SCHEMA FIELD", "schemaField"),
-    )
-    rows = [
-        [
-            str(field.get(key, ""))
-            if key in {"name", "type", "documents", "schemaField"}
-            else _yes_no(field.get(key))
-            for _, key in columns
-        ]
-        for field in fields
-    ]
-    widths = [
-        max([len(heading), *(len(row[index]) for row in rows)])
-        for index, (heading, _) in enumerate(columns)
-    ]
-
-    print(f"Solr collection: {target.rstrip('/')}")
+    columns = (('FIELD', 'name'), ('TYPE', 'type'), ('STORED', 'stored'), ('INDEXED', 'indexed'), ('DOC VALUES',
+               'docValues'), ('MULTI VALUED', 'multiValued'), ('DOCUMENTS', 'documents'), ('SCHEMA FIELD', 'schemaField'))
+    rows = [[str(field.get(key, '')) if key in {'name', 'type', 'documents', 'schemaField'} else _yes_no(
+        field.get(key)) for _, key in columns] for field in fields]
+    widths = [max([len(heading)] + [len(row[index]) for row in rows])
+              for index, (heading, _) in enumerate(columns)]
+    print('Solr collection: {0}'.format(target.rstrip('/')))
     if configuration_path is not None:
-        source = (
-            "specified by --config" if configuration_explicit else "default configuration"
-        )
-        print(f"Configuration: {configuration_path} ({source})")
-    print(f"Fields: {len(rows)}")
+        source = 'specified by --config' if configuration_explicit else 'default configuration'
+        print('Configuration: {0} ({1})'.format(configuration_path, source))
+    print('Fields: {0}'.format(len(rows)))
     print()
-    print("  ".join(heading.ljust(widths[index]) for index, (heading, _) in enumerate(columns)))
-    print("  ".join("-" * width for width in widths))
+    print('  '.join((heading.ljust(widths[index]) for index, (heading, _) in enumerate(columns))))
+    print('  '.join(('-' * width for width in widths)))
     for row in rows:
-        print("  ".join(value.ljust(widths[index]) for index, value in enumerate(row)))
+        print('  '.join((value.ljust(widths[index]) for index, value in enumerate(row))))
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+class ExactArgumentParser(argparse.ArgumentParser):
+    """Disable abbreviated options without requiring Python 3.5's allow_abbrev."""
+
+    def _get_option_tuples(self, option_string):
+        return []
+
+
+def build_parser():
+    parser = ExactArgumentParser(
         prog="dq",
         usage="""%(prog)s --report NAME [NAME ...] [options]
        %(prog)s --ids empty_fields [options]
@@ -165,7 +110,6 @@ def build_parser() -> argparse.ArgumentParser:
        %(prog)s --write_config [options]
        %(prog)s --help
        %(prog)s --version""",
-        allow_abbrev=False,
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description="""\
 DQ2 generates data-quality reports for Apache Solr, Elasticsearch,
@@ -216,7 +160,7 @@ Project documentation:
     parser.add_argument(
         "--version",
         action="version",
-        version=f"%(prog)s {__version__}",
+        version="%(prog)s {0}".format(__version__),
     )
     actions.add_argument(
         "--report",
@@ -284,153 +228,114 @@ Project documentation:
     return parser
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def main(argv=None):
     parser = build_parser()
     arguments = list(argv) if argv is not None else sys.argv[1:]
     options = parser.parse_args(arguments)
     options.report = [name for group in options.report for name in group]
-    action_count = sum(
-        (bool(options.write_config), bool(options.list_fields), bool(options.report), bool(options.ids))
-    )
+    action_count = sum((bool(options.write_config), bool(
+        options.list_fields), bool(options.report), bool(options.ids)))
     if action_count > 1:
-        parser.error("choose only one action: --report, --ids, --list_fields, or --write_config")
+        parser.error('choose only one action: --report, --ids, --list_fields, or --write_config')
     if options.ids:
         written = 0
         try:
             config = load_config(options.config)
-            target = collection_url(config, main_url=options.main_url, collection=options.collection)
-            fields = select_fields(
-                list_fields(target, include_counts=False),
-                include=options.include_fields, exclude=options.exclude_fields,
-            )
+            target = collection_url(config, main_url=options.main_url,
+                                    collection=options.collection)
+            fields = select_fields(list_fields(target, include_counts=False),
+                                   include=options.include_fields, exclude=options.exclude_fields)
             if len(fields) != 1:
-                names = ", ".join(str(field["name"]) for field in fields) or "none"
+                names = ', '.join((str(field['name']) for field in fields)) or 'none'
                 raise SolrError(
-                    f"--ids empty_fields requires exactly one field; matched {len(fields)}: {names}; "
-                    "narrow --include_field/--exclude_field"
-                )
+                    '--ids empty_fields requires exactly one field; matched {0}: {1}; narrow --include_field/--exclude_field'.format(len(fields), names))
             field = fields[0]
-            if field.get("stored") is not True:
-                raise SolrError(f"--ids empty_fields requires a stored field: {field['name']}")
-            print(f"Solr collection: {target}; missing field: {field['name']}", file=sys.stderr)
+            if field.get('stored') is not True:
+                raise SolrError(
+                    '--ids empty_fields requires a stored field: {0}'.format(field['name']))
+            print('Solr collection: {0}; missing field: {1}'.format(
+                target, field['name']), file=sys.stderr)
             if config.source:
-                source = "specified by --config" if options.config else "default configuration"
-                print(f"Configuration: {config.source} ({source})", file=sys.stderr)
-            for ids in missing_id_pages(target, str(field["name"])):
+                source = 'specified by --config' if options.config else 'default configuration'
+                print('Configuration: {0} ({1})'.format(config.source, source), file=sys.stderr)
+            for ids in missing_id_pages(target, str(field['name'])):
                 for value in ids:
                     print(value)
                 sys.stdout.flush()
                 written += len(ids)
                 if sys.stderr.isatty():
-                    print(f"\rExported {written:,} IDs", end="", file=sys.stderr, flush=True)
-            print(f"\nCompleted: {written:,} IDs exported.", file=sys.stderr)
+                    print('\rExported {0:,} IDs'.format(written),
+                          end='', file=sys.stderr, flush=True)
+            print('\nCompleted: {0:,} IDs exported.'.format(written), file=sys.stderr)
         except BrokenPipeError:
-            # Prevent a second broken-pipe exception when Python flushes at exit.
-            with open(os.devnull, "w") as sink:
+            with open(os.devnull, 'w') as sink:
                 os.dup2(sink.fileno(), sys.stdout.fileno())
             return 0
         except (ConfigError, SolrError, OSError) as error:
-            parser.exit(2, f"\ndq: error: {error}; export incomplete ({written:,} IDs written)\n")
+            parser.exit(
+                2, '\ndq: error: {0}; export incomplete ({1:,} IDs written)\n'.format(error, written))
         except KeyboardInterrupt:
-            parser.exit(130, f"\ndq: interrupted; export incomplete ({written:,} IDs written)\n")
+            parser.exit(
+                130, '\ndq: interrupted; export incomplete ({0:,} IDs written)\n'.format(written))
         return 0
     if options.write_config:
         try:
-            output_path = (
-                Path(options.config).expanduser().resolve()
-                if options.config
-                else Path.cwd() / "dq.ini"
-            )
-            config = (
-                load_config(str(output_path))
-                if output_path.is_file()
-                else DqConfig()
-            )
+            output_path = absolute_path(
+                options.config) if options.config else os.path.join(os.getcwd(), 'dq.ini')
+            config = load_config(str(output_path)) if os.path.isfile(output_path) else DqConfig()
             resolved_main_url = options.main_url or config.main_url
             if not resolved_main_url:
                 raise ConfigError(
-                    "main_url is required; use --main_url, DQ_MAIN_URL, or an existing config"
-                )
+                    'main_url is required; use --main_url, DQ_MAIN_URL, or an existing config')
             if options.main_url and main_url_has_collection(options.main_url):
                 resolved_collection = options.collection
             else:
                 resolved_collection = options.collection or config.collection
-            collection_url(
-                DqConfig(main_url=resolved_main_url, collection=resolved_collection)
-            )
+            collection_url(DqConfig(main_url=resolved_main_url, collection=resolved_collection))
             write_config(output_path, resolved_main_url, resolved_collection)
-            print(f"Wrote configuration: {output_path}")
+            print('Wrote configuration: {0}'.format(output_path))
         except ConfigError as error:
-            parser.exit(2, f"dq: error: {error}\n")
+            parser.exit(2, 'dq: error: {0}\n'.format(error))
         return 0
     if options.list_fields:
         try:
             config = load_config(options.config)
-            target = collection_url(
-                config,
-                main_url=options.main_url,
-                collection=options.collection,
-            )
-            print_fields(
-                target,
-                include=options.include_fields,
-                exclude=options.exclude_fields,
-                configuration_path=config.source,
-                configuration_explicit=bool(options.config),
-            )
+            target = collection_url(config, main_url=options.main_url,
+                                    collection=options.collection)
+            print_fields(target, include=options.include_fields, exclude=options.exclude_fields,
+                         configuration_path=config.source, configuration_explicit=bool(options.config))
         except (ConfigError, SolrError) as error:
-            parser.exit(2, f"dq: error: {error}\n")
+            parser.exit(2, 'dq: error: {0}\n'.format(error))
         return 0
     if options.report:
         try:
             config = load_config(options.config)
-            target = collection_url(
-                config,
-                main_url=options.main_url,
-                collection=options.collection,
-            )
-            unimplemented = [name for name in options.report if name != "empty_fields"]
+            target = collection_url(config, main_url=options.main_url,
+                                    collection=options.collection)
+            unimplemented = [name for name in options.report if name != 'empty_fields']
             if unimplemented:
-                names = ", ".join(dict.fromkeys(unimplemented))
-                raise ReportError(f"report not implemented yet: {names}")
-            output_path = Path.cwd() / "empty_fields.md"
-            write_empty_fields_report(
-                target,
-                output_path,
-                include=options.include_fields,
-                exclude=options.exclude_fields,
-                configuration_path=config.source,
-                configuration_explicit=bool(options.config),
-                option_details=_report_option_details(
-                    options, config, target, output_path
-                ),
-            )
-            print(f"Wrote report: {output_path}")
+                names = ', '.join(dict.fromkeys(unimplemented))
+                raise ReportError('report not implemented yet: {0}'.format(names))
+            output_path = os.path.join(os.getcwd(), 'empty_fields.md')
+            write_empty_fields_report(target, output_path, include=options.include_fields, exclude=options.exclude_fields, configuration_path=config.source,
+                                      configuration_explicit=bool(options.config), option_details=_report_option_details(options, config, target, output_path))
+            print('Wrote report: {0}'.format(output_path))
         except (ConfigError, ReportError, SolrError) as error:
-            parser.exit(2, f"dq: error: {error}\n")
+            parser.exit(2, 'dq: error: {0}\n'.format(error))
         return 0
     if not arguments:
         parser.print_help(sys.stderr)
     try:
         config = load_config(options.config)
-        target = collection_url(
-            config,
-            main_url=options.main_url,
-            collection=options.collection,
-        )
+        target = collection_url(config, main_url=options.main_url, collection=options.collection)
     except ConfigError as error:
-        parser.exit(2, f"dq: error: {error}\n")
+        parser.exit(2, 'dq: error: {0}\n'.format(error))
     if config.source is None:
-        configuration_detail = ""
+        configuration_detail = ''
     elif options.config:
-        configuration_detail = (
-            f" using configuration file {config.source} specified by --config"
-        )
+        configuration_detail = ' using configuration file {0} specified by --config'.format(
+            config.source)
     else:
-        configuration_detail = f" using default configuration file {config.source}"
+        configuration_detail = ' using default configuration file {0}'.format(config.source)
     parser.exit(
-        2,
-        f"dq: error: target resolves to {target}{configuration_detail}, "
-        "but no action was selected; "
-        "use --report NAME, --ids empty_fields, --list_fields, or --write_config\n",
-    )
+        2, 'dq: error: target resolves to {0}{1}, but no action was selected; use --report NAME, --ids empty_fields, --list_fields, or --write_config\n'.format(target, configuration_detail))

@@ -29,11 +29,11 @@ Requirements and dependencies
 
 Required software:
 
-* Python 3.7 or newer
+* Python 3.4.10 or newer
 
-Python 3.7 is the minimum because the code uses dataclasses and postponed
+Python 3.4.10 is the minimum because the code uses dataclasses and postponed
 type annotations. The CLI tests and a live Solr report have been checked with
-Python 3.7.9. To test with this machine's separate Python 3.7 installation
+Python 3.4.10.9. To test with this machine's separate Python 3.4.10 installation
 without changing the default interpreter:
 
     /Library/Frameworks/Python.framework/Versions/3.7/bin/python3 bin/dq --version
@@ -58,7 +58,7 @@ to perform a report.
 Run directly from the project
 -----------------------------
 
-No package installation is needed. With Python 3.7 or newer available as
+No package installation is needed. With Python 3.4.10 or newer available as
 ``python3``, run the executable launcher:
 
     cd /Users/mbennett/Dropbox/dev/dq
@@ -67,7 +67,7 @@ No package installation is needed. With Python 3.7 or newer available as
     ./bin/dq --version
 
 ``bin/verify-python`` checks the same ``python3`` on PATH used by ``bin/dq``.
-It reports the interpreter path and version, requires Python 3.7 or newer,
+It reports the interpreter path and version, requires Python 3.4.10 or newer,
 checks HTTPS support, and verifies that this checkout's DQ CLI loads. It exits
 with status 0 on success or a nonzero status on failure, with errors on stderr.
 It does not install software, change your environment, or contact Solr.
@@ -406,3 +406,7 @@ The first live report command is:
     dq --report empty_fields \
        --main_url http://localhost:8983/solr \
        --collection my-files
+
+Python compatibility: runtime code uses ordinary classes, os.path and str.format.
+The checkout launcher requires Python 3.4.10 or newer. Run bin/verify-python
+without arguments to check python3 on PATH. Packaging metadata is in setup.py.
