@@ -8,7 +8,6 @@ Contents
 
 - [Quickstart](#quickstart)
 - [Requirements and dependencies](#requirements-and-dependencies)
-- [Run directly from the project](#run-directly-from-the-project)
 - [Optional development installation](#optional-development-installation)
 - [Basic usage](#basic-usage)
   - [Export IDs for an empty field](#export-ids-for-an-empty-field)
@@ -35,6 +34,7 @@ installation or third-party Python dependencies are needed:
 cd ~/dev/dq
 ./bin/verify-python
 ./bin/dq --help
+./bin/dq --version
 ./bin/dq --main_url http://localhost:8983/solr --collection my-files --write_config
 ./bin/dq --report empty_fields
 ```
@@ -45,7 +45,9 @@ authentication, add `username` and `password` to the INI file under its existing
 `[DEFAULT]` or `[dq]` section before running the report. See
 [Supporting HTTPS](#supporting-https) for certificate and authentication settings.
 
-Open `report_empty_fields.md` in your Markdown viewer. Other available actions:
+Open `report_empty_fields.md` in your Markdown viewer.
+
+Other available actions:
 
 ```sh
 ./bin/dq --list_fields
@@ -57,31 +59,6 @@ write to standard output, without creating a Markdown report.
 
 Releases are planned to offer prebuilt binaries for users who need them. These
 instructions currently assume you run `./bin/dq` directly from the checkout.
-
-Requirements and dependencies
------------------------------
-
-Required software:
-
-* Python 3.4.10 or newer
-
-Dependencies: No runtime or development dependencies; DQ uses only the Python standard library.
-
-Python 3.4.10 is the tested compatibility baseline. The code uses ordinary classes,
-``os.path`` and file operations, and ``str.format()`` instead of dataclasses,
-pathlib, type hints, or f-strings. It retains Python's standard ``argparse``
-module, available since Python 3.2. Python 3.0/3.1 are not claimed as supported.
-
-Run directly from the project
------------------------------
-
-No package installation is needed. With Python 3.4.10 or newer available as
-``python3``, run the executable launcher:
-
-    cd ~/dev/dq
-    ./bin/verify-python
-    ./bin/dq --help
-    ./bin/dq --version
 
 ``bin/verify-python`` takes no arguments and checks the same ``python3`` on PATH
 used by ``bin/dq``.
@@ -105,6 +82,20 @@ selects this checkout ahead of a previously installed ``dq`` command.
 The launcher loads code directly from this checkout and preserves the current
 working directory for config lookup and report output. It uses the ``python3``
 found on PATH, including an activated virtual environment.
+
+Requirements and dependencies
+-----------------------------
+
+Required software:
+
+* Python 3.4.10 or newer
+
+Dependencies: No runtime or development dependencies; DQ uses only the Python standard library.
+
+Python 3.4.10 is the tested compatibility baseline. The code uses ordinary classes,
+``os.path`` and file operations, and ``str.format()`` instead of dataclasses,
+pathlib, type hints, or f-strings. It retains Python's standard ``argparse``
+module, available since Python 3.2. Python 3.0/3.1 are not claimed as supported.
 
 Optional development installation
 ---------------------------------
