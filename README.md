@@ -430,3 +430,7 @@ indented continuation lines. CLI filters replace the corresponding saved list;
 an empty CLI string clears it. --write_config saves filters, and reports identify
 the source of effective options. Generated report filenames start with report_
 and are ignored by Git; Markdown documentation remains trackable.
+
+Copy aux-bin/solr-auth into your Solr installation (local-scripts/ or bin/).
+See aux-bin/README.md. It stores reusable local credentials and security backups
+under Solr, toggles Basic authentication, and optionally restarts the local node.
