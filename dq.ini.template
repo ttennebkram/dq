@@ -1,0 +1,13 @@
+# DQ2 configuration template
+#
+# Copy this file to dq.ini in a project directory, then edit the values.
+# DQ searches the current directory and its parents for dq.ini.
+
+[DEFAULT]
+# Base URL for Solr, Elasticsearch, or OpenSearch.
+# It may include the collection or index name.
+main_url = http://localhost:8983/solr
+
+# Collection or index to inspect. Omit this setting when main_url already
+# includes it, for example: http://localhost:8983/solr/my-files
+collection = my-files

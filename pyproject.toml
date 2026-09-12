@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dq"
+version = "2.0.1"
+description = "Lightweight data-quality reports for search indexes"
+readme = {file = "README.md", content-type = "text/markdown"}
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+dq = "dq.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

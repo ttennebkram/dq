@@ -1,0 +1,19 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local DQ target configuration; use dq.ini.template as the tracked example.
+dq.ini
+
+# Generated report when DQ is run from the project root.
+/empty_fields.md
+
+.DS_Store
