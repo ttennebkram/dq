@@ -41,6 +41,10 @@ collection = my-files
 #     empty_fields implemented; term_stats, code_points, date_checker planned.
 #   --ids / -id empty_fields
 #   --list_fields / --list-fields
+#   --config_wizard / --config-wizard
+#     Interactive setup; writes ./dq.ini or --config FILE, which may be new.
+#     Defaults: CLI then destination file; ignores environment/other config files.
+#     Enter keeps a value; - clears optional values; asks before saving.
 #   --write_config / --write-config
 # Other command-line-only options:
 #   --config FILE

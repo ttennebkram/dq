@@ -12,6 +12,7 @@ Contents
 - [Basic usage](#basic-usage)
   - [Export IDs for an empty field](#export-ids-for-an-empty-field)
 - [Configuration](#configuration)
+  - [Configuration wizard](#configuration-wizard)
   - [Saved field filters](#saved-field-filters)
 - [Generated reports and Git](#generated-reports-and-git)
 - [Report behavior](#report-behavior)
@@ -38,6 +39,8 @@ cd ~/dev/dq
 ./bin/dq --main_url http://localhost:8983/solr --collection my-files --write_config
 ./bin/dq --report empty_fields
 ```
+
+For guided setup instead, run `./bin/dq --config_wizard`.
 
 Replace the server URL and collection with your own. `--write_config` saves the
 target in `dq.ini`, so later commands can omit it. If Solr requires Basic
@@ -125,6 +128,7 @@ The usage synopsis shows each action separately:
     dq --ids empty_fields [options]
     dq --list_fields [options]
     dq --write_config [options]
+    dq --config_wizard [options]
     dq --help
     dq --version
 
@@ -133,7 +137,7 @@ Choose one action and add shared target or field-filter options as needed.
 DQ then validates the target in order: first ``main_url``, then the collection
 or index. If both resolve from ``dq.ini`` or another source, it explicitly says
 that no action was selected and asks for ``--report NAME``, ``--ids empty_fields``, ``--list_fields``,
-or ``--write_config``. This makes a missing target distinguishable from a
+or ``--write_config`` or ``--config_wizard``. This makes a missing target distinguishable from a
 missing action.
 
     dq --version
@@ -196,7 +200,7 @@ stderr is a terminal), completion counts, and errors go to stderr.
 Use ``--include_field[s]`` and ``--exclude_field[s]`` with the usual simple glob
 patterns. They must select exactly one stored field; otherwise DQ lists the
 matching fields and exits with an error. ``--ids`` cannot be combined with
-``--report``, ``--list_fields``, or ``--write_config``.
+``--report``, ``--list_fields``, or ``--write_config`` or ``--config_wizard``.
 
 DQ discovers the schema's unique key instead of assuming it is named ``id``.
 It requests only that field, sorted by the unique key, using Solr ``cursorMark``
@@ -271,6 +275,39 @@ standard output when a saved copy is wanted:
 
 Configuration
 -------------
+
+### Configuration wizard
+
+Run `dq --config_wizard` (alias `--config-wizard`) to walk through the standard
+settings: `main_url`, collection/index, optional Basic authentication username
+and password, trusted PEM certificate, and include/exclude field patterns.
+It writes `dq.ini` in the current directory; use `--config FILE` to create or
+update another file:
+
+```sh
+./bin/dq --config_wizard
+./bin/dq --config_wizard --config targets.ini
+```
+
+The wizard uses command-line settings first, then existing values in the
+destination file. It does not inherit environment variables or other discovered
+config files. For a new file, the suggested URL is `http://localhost:8983/solr`.
+Enter keeps a default; `-` clears an optional value. If the URL includes a
+collection, the wizard explains that the separate collection setting is omitted.
+Clearing the username also clears the password. Password entry is hidden and the
+summary redacts it, but the saved INI contains plaintext credentials.
+
+For each field filter list, Enter keeps the list, `-` clears it, or enter one
+glob per line followed by an empty line. Patterns are simple globs, not regex;
+commas and spaces within a pattern are literal. Both lists empty retain the
+usual default exclusion of `_*_`. Relative certificate paths entered in the
+wizard are relative to the destination INI directory and are saved as absolute
+paths. The wizard validates the target and certificate locally without contacting
+the server, shows a summary, and asks before writing. Answer no, press Ctrl-C,
+or end input to cancel without writing. It uses the same atomic, owner-only
+file writing as `--write_config` and comments out changed old target/filter values.
+Choose this action separately from reports, ID export, listing, or `--write_config`.
+
 
 The project includes a template containing every currently supported setting:
 
@@ -354,7 +391,7 @@ Use a specific configuration file with:
 
     dq --config /path/to/another.ini --list_fields
 
-Without ``--write_config``, the file named by ``--config`` must already exist.
+Without ``--write_config`` or ``--config_wizard``, the file named by ``--config`` must already exist.
 DQ reports an error instead of silently falling back to another ``dq.ini`` or
 to environment settings.
 

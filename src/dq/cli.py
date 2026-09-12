@@ -137,6 +137,7 @@ def build_parser():
        %(prog)s --ids empty_fields [options]
        %(prog)s --list_fields [options]
        %(prog)s --write_config [options]
+       %(prog)s --config_wizard [options]
        %(prog)s --help
        %(prog)s --version""",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -248,7 +249,7 @@ Project documentation:
     parser.add_argument(
         "--config",
         metavar="FILE",
-        help="read existing FILE; with --write_config, create or update FILE",
+        help="read existing FILE; with --write_config or --config_wizard, create or update FILE",
     )
     actions.add_argument(
         "--write_config",
@@ -256,6 +257,8 @@ Project documentation:
         action="store_true",
         help="write settings to ./dq.ini or the file named by --config",
     )
+    actions.add_argument('--config_wizard', '--config-wizard', action='store_true',
+                         help='interactively configure settings and save ./dq.ini or --config FILE')
     parser.add_argument('--username', metavar='NAME', help='HTTP Basic authentication username')
     parser.add_argument('--password', metavar='PASSWORD',
                         help='HTTP Basic password; prefer the INI file to shell history')
@@ -269,10 +272,18 @@ def main(argv=None):
     arguments = list(argv) if argv is not None else sys.argv[1:]
     options = parser.parse_args(arguments)
     options.report = [name for group in options.report for name in group]
-    action_count = sum((bool(options.write_config), bool(
+    action_count = sum((bool(options.config_wizard), bool(options.write_config), bool(
         options.list_fields), bool(options.report), bool(options.ids)))
     if action_count > 1:
-        parser.error('choose only one action: --report, --ids, --list_fields, or --write_config')
+        parser.error('choose only one action: --report, --ids, --list_fields, --write_config, or --config_wizard')
+    if options.config_wizard:
+        from dq.wizard import run_wizard
+        try:
+            return run_wizard(options)
+        except (EOFError, KeyboardInterrupt):
+            parser.exit(130, '\ndq: configuration wizard cancelled; no file written\n')
+        except (ConfigError, OSError) as error:
+            parser.exit(2, 'dq: error: {0}\n'.format(error))
     if options.ids:
         written = 0
         try:
@@ -385,4 +396,4 @@ def main(argv=None):
     else:
         configuration_detail = ' using default configuration file {0}'.format(config.source)
     parser.exit(
-        2, 'dq: error: target resolves to {0}{1}, but no action was selected; use --report NAME, --ids empty_fields, --list_fields, or --write_config\n'.format(target, configuration_detail))
+        2, 'dq: error: target resolves to {0}{1}, but no action was selected; use --report NAME, --ids empty_fields, --list_fields, --write_config, or --config_wizard\n'.format(target, configuration_detail))

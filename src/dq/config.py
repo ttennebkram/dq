@@ -116,7 +116,7 @@ def main_url_has_collection(main_url):
 
 
 def write_config(path, main_url, collection, username=None, password=None, trust_certificate=None,
-                 include_fields=None, exclude_fields=None):
+                 include_fields=None, exclude_fields=None, preserve_optional=True):
     """Atomically update target settings, commenting out changed old values."""
     normalized_main_url = main_url.rstrip('/')
     previous = _read_config(path) if os.path.isfile(path) else DqConfig()
@@ -130,7 +130,7 @@ def write_config(path, main_url, collection, username=None, password=None, trust
         lines.append('collection = {0}'.format(collection))
     for name, value in [('username', username), ('password', password),
                         ('trust_certificate', trust_certificate)]:
-        if value is None:
+        if value is None and preserve_optional:
             value = getattr(previous, name)
         if value is not None:
             if '\n' in value or '\r' in value:
