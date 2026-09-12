@@ -3,24 +3,27 @@ import json
 from fnmatch import fnmatchcase
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+from urllib.request import Request
+from dq.connection import Connection
 
 
 class SolrError(RuntimeError):
     """A Solr request could not be completed."""
 
 
-def get_json(collection_url, path, **parameters):
+def get_json(collection_url, path, connection=None, **parameters):
     """Get a JSON response from an API below a Solr collection URL."""
     url = '{0}/{1}'.format(collection_url.rstrip('/'), path.lstrip('/'))
     if parameters:
         url = '{0}?{1}'.format(url, urlencode(parameters))
     request = Request(url, headers={'Accept': 'application/json'})
+    if connection is None:
+        connection = Connection()
     try:
-        with urlopen(request, timeout=30) as response:
+        with connection.open(request) as response:
             return json.loads(response.read().decode('utf-8'))
     except HTTPError as error:
-        detail = error.read().decode('utf-8', errors='replace').strip()
+        detail = '' if connection and connection.authenticated else error.read().decode('utf-8', errors='replace').strip()
         message = 'Solr returned HTTP {0} for {1}'.format(error.code, url)
         if detail:
             message = '{0}: {1}'.format(message, detail)
@@ -33,9 +36,9 @@ def get_json(collection_url, path, **parameters):
         raise SolrError('Solr returned an invalid JSON response from {0}'.format(url)) from error
 
 
-def field_document_count(collection_url, field_name):
+def field_document_count(collection_url, field_name, connection=None):
     """Count documents containing a field, including point and vector fields."""
-    response = get_json(collection_url, 'select', q='*:*',
+    response = get_json(collection_url, 'select', connection=connection, q='*:*',
                         fq='{!frange l=1}exists($dq_field)', dq_field=field_name, rows=0, wt='json')
     result = response.get('response')
     count = result.get('numFound') if isinstance(result, dict) else None
@@ -45,9 +48,9 @@ def field_document_count(collection_url, field_name):
     return count
 
 
-def collection_document_count(collection_url):
+def collection_document_count(collection_url, connection=None):
     """Return the number of active documents in a collection."""
-    response = get_json(collection_url, 'select', q='*:*', rows=0, wt='json')
+    response = get_json(collection_url, 'select', connection=connection, q='*:*', rows=0, wt='json')
     result = response.get('response')
     count = result.get('numFound') if isinstance(result, dict) else None
     if not isinstance(count, int):
@@ -55,14 +58,14 @@ def collection_document_count(collection_url):
     return count
 
 
-def list_fields(collection_url, *, include_counts=True):
+def list_fields(collection_url, *, include_counts=True, connection=None):
     """Return concrete index fields enriched with their schema properties."""
-    schema_response = get_json(collection_url, 'schema/fields',
+    schema_response = get_json(collection_url, 'schema/fields', connection=connection,
                                includeDynamic='true', showDefaults='true', wt='json')
     definitions = schema_response.get('fields')
     if not isinstance(definitions, list):
         raise SolrError('Solr Schema API response did not contain a fields list')
-    luke_response = get_json(collection_url, 'admin/luke', numTerms=0, wt='json')
+    luke_response = get_json(collection_url, 'admin/luke', connection=connection, numTerms=0, wt='json')
     concrete_fields = luke_response.get('fields')
     if not isinstance(concrete_fields, dict):
         raise SolrError('Solr Luke API response did not contain a fields object')
@@ -83,21 +86,21 @@ def list_fields(collection_url, *, include_counts=True):
             field['documents'] = luke_properties.get('docs', '')
             field.setdefault('type', luke_properties.get('type', ''))
         if include_counts and field.get('documents', '') == '':
-            field['documents'] = field_document_count(collection_url, name)
+            field['documents'] = field_document_count(collection_url, name, connection=connection)
         result.append(field)
     return sorted(result, key=lambda field: str(field.get('name', '')))
 
 
-def missing_id_pages(collection_url, field_name, *, page_size=1000):
+def missing_id_pages(collection_url, field_name, *, page_size=1000, connection=None):
     """Yield bounded pages of unique keys for documents where exists(field) is false."""
     if page_size < 1:
         raise ValueError('page_size must be positive')
-    key = get_json(collection_url, 'schema/uniquekey', wt='json').get('uniqueKey')
+    key = get_json(collection_url, 'schema/uniquekey', connection=connection, wt='json').get('uniqueKey')
     if not isinstance(key, str) or not key:
         raise SolrError('Solr schema has no unique key; cannot export IDs')
     cursor = '*'
     while True:
-        page = get_json(collection_url, 'select', q='*:*', fq='{!frange l=0 u=0}exists($dq_field)', dq_field=field_name, fl=key, sort='{0} asc'.format(
+        page = get_json(collection_url, 'select', connection=connection, q='*:*', fq='{!frange l=0 u=0}exists($dq_field)', dq_field=field_name, fl=key, sort='{0} asc'.format(
             key), rows=page_size, cursorMark=cursor, wt='json', omitHeader='false', **{'shards.tolerant': 'false'})
         header = page.get('responseHeader', {})
         if header.get('partialResults') not in (None, False, 'false'):

@@ -40,9 +40,9 @@ class CompatibilityTests(unittest.TestCase):
 
     def test_utf8_json_from_binary_response(self):
         payload = json.dumps({'text': 'café'}, ensure_ascii=False).encode('utf-8')
-        with patch('dq.solr.urlopen', return_value=io.BytesIO(payload)):
+        with patch('dq.solr.Connection.open', return_value=io.BytesIO(payload)):
             self.assertEqual(get_json('http://solr/c', 'select'), {'text': 'café'})
-        with patch('dq.solr.urlopen', return_value=io.BytesIO(b'{broken')):
+        with patch('dq.solr.Connection.open', return_value=io.BytesIO(b'{broken')):
             with self.assertRaises(SolrError):
                 get_json('http://solr/c', 'select')
 

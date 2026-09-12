@@ -3,6 +3,7 @@ import argparse
 import os
 import sys
 from dq.files import absolute_path
+from dq.connection import connection_values, make_connection
 from urllib.parse import unquote, urlsplit
 from dq import __version__
 from dq.config import ConfigError, DqConfig, collection_url, load_config, main_url_has_collection, write_config
@@ -69,13 +70,20 @@ def _report_option_details(options, config, target, output_path):
         ('exclude_fields', exclude_value, exclude_source),
         ('output file', str(output_path), 'built-in default'),
     ]
+    for name, value in sorted(connection_values(options, config).items()):
+        source = 'command line' if getattr(options, name) is not None else configuration_source
+        if value is None:
+            value, source = 'not set', 'built-in default'
+        elif name == 'password':
+            value = '[redacted]'
+        details.append((name, value, source))
     return details
 
 
 
 def print_fields(target, *, include=(), exclude=(), configuration_path=None,
-                 configuration_explicit=False):
-    fields = select_fields(list_fields(target), include=include, exclude=exclude)
+                 configuration_explicit=False, connection=None):
+    fields = select_fields(list_fields(target, connection=connection), include=include, exclude=exclude)
     columns = (('FIELD', 'name'), ('TYPE', 'type'), ('STORED', 'stored'), ('INDEXED', 'indexed'), ('DOC VALUES',
                'docValues'), ('MULTI VALUED', 'multiValued'), ('DOCUMENTS', 'documents'), ('SCHEMA FIELD', 'schemaField'))
     rows = [[str(field.get(key, '')) if key in {'name', 'type', 'documents', 'schemaField'} else _yes_no(
@@ -225,6 +233,11 @@ Project documentation:
         action="store_true",
         help="write settings to ./dq.ini or the file named by --config",
     )
+    parser.add_argument('--username', metavar='NAME', help='HTTP Basic authentication username')
+    parser.add_argument('--password', metavar='PASSWORD',
+                        help='HTTP Basic password; prefer the INI file to shell history')
+    parser.add_argument('--trust_certificate', '--trust-certificate', metavar='FILE',
+                        help='PEM CA or self-signed certificate to trust; hostname checks remain enabled')
     return parser
 
 
@@ -241,9 +254,10 @@ def main(argv=None):
         written = 0
         try:
             config = load_config(options.config)
+            connection = make_connection(options, config)
             target = collection_url(config, main_url=options.main_url,
                                     collection=options.collection)
-            fields = select_fields(list_fields(target, include_counts=False),
+            fields = select_fields(list_fields(target, include_counts=False, connection=connection),
                                    include=options.include_fields, exclude=options.exclude_fields)
             if len(fields) != 1:
                 names = ', '.join((str(field['name']) for field in fields)) or 'none'
@@ -258,7 +272,7 @@ def main(argv=None):
             if config.source:
                 source = 'specified by --config' if options.config else 'default configuration'
                 print('Configuration: {0} ({1})'.format(config.source, source), file=sys.stderr)
-            for ids in missing_id_pages(target, str(field['name'])):
+            for ids in missing_id_pages(target, str(field['name']), connection=connection):
                 for value in ids:
                     print(value)
                 sys.stdout.flush()
@@ -292,7 +306,10 @@ def main(argv=None):
             else:
                 resolved_collection = options.collection or config.collection
             collection_url(DqConfig(main_url=resolved_main_url, collection=resolved_collection))
-            write_config(output_path, resolved_main_url, resolved_collection)
+            values = connection_values(options, config)
+            if (values['username'] is None) != (values['password'] is None):
+                raise ConfigError('username and password must be supplied together')
+            write_config(output_path, resolved_main_url, resolved_collection, **values)
             print('Wrote configuration: {0}'.format(output_path))
         except ConfigError as error:
             parser.exit(2, 'dq: error: {0}\n'.format(error))
@@ -300,16 +317,18 @@ def main(argv=None):
     if options.list_fields:
         try:
             config = load_config(options.config)
+            connection = make_connection(options, config)
             target = collection_url(config, main_url=options.main_url,
                                     collection=options.collection)
             print_fields(target, include=options.include_fields, exclude=options.exclude_fields,
-                         configuration_path=config.source, configuration_explicit=bool(options.config))
+                         configuration_path=config.source, configuration_explicit=bool(options.config), connection=connection)
         except (ConfigError, SolrError) as error:
             parser.exit(2, 'dq: error: {0}\n'.format(error))
         return 0
     if options.report:
         try:
             config = load_config(options.config)
+            connection = make_connection(options, config)
             target = collection_url(config, main_url=options.main_url,
                                     collection=options.collection)
             unimplemented = [name for name in options.report if name != 'empty_fields']
@@ -318,7 +337,7 @@ def main(argv=None):
                 raise ReportError('report not implemented yet: {0}'.format(names))
             output_path = os.path.join(os.getcwd(), 'empty_fields.md')
             write_empty_fields_report(target, output_path, include=options.include_fields, exclude=options.exclude_fields, configuration_path=config.source,
-                                      configuration_explicit=bool(options.config), option_details=_report_option_details(options, config, target, output_path))
+                                      configuration_explicit=bool(options.config), option_details=_report_option_details(options, config, target, output_path), connection=connection)
             print('Wrote report: {0}'.format(output_path))
         except (ConfigError, ReportError, SolrError) as error:
             parser.exit(2, 'dq: error: {0}\n'.format(error))

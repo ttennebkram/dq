@@ -11,3 +11,9 @@ main_url = http://localhost:8983/solr
 # Collection or index to inspect. Omit this setting when main_url already
 # includes it, for example: http://localhost:8983/solr/my-files
 collection = my-files
+
+# Optional Basic authentication (use HTTPS):
+# username = solr
+# password = replace-with-your-password
+# Optional PEM CA or self-signed certificate, relative to this INI file:
+# trust_certificate = certificates/solr-ca.pem

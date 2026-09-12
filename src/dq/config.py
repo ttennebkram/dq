@@ -12,10 +12,13 @@ class ConfigError(ValueError):
 class DqConfig:
     """Resolved target settings and the file they came from."""
 
-    def __init__(self, main_url=None, collection=None, source=None):
+    def __init__(self, main_url=None, collection=None, source=None, username=None, password=None, trust_certificate=None):
         self.main_url = main_url
         self.collection = collection
         self.source = source
+        self.username = username
+        self.password = password
+        self.trust_certificate = trust_certificate
 
 
 def _project_config(start):
@@ -41,7 +44,9 @@ def _read_config(path):
     if parser.has_section('dq'):
         values.update(parser.items('dq'))
     return DqConfig(main_url=values.get('main_url'),
-                    collection=values.get('collection'), source=absolute_path(path))
+                    collection=values.get('collection'), source=absolute_path(path),
+                    username=values.get('username'), password=values.get('password'),
+                    trust_certificate=values.get('trust_certificate'))
 
 
 def load_config(explicit_path=None, start=None):
@@ -59,7 +64,8 @@ def load_config(explicit_path=None, start=None):
     if explicit_path:
         return config
     return DqConfig(main_url=os.environ.get('DQ_MAIN_URL', config.main_url), collection=os.environ.get(
-        'DQ_COLLECTION', config.collection), source=config.source)
+        'DQ_COLLECTION', config.collection), source=config.source, username=config.username, password=config.password,
+        trust_certificate=config.trust_certificate)
 
 
 def collection_url(config, *, main_url=None, collection=None):
@@ -67,6 +73,11 @@ def collection_url(config, *, main_url=None, collection=None):
     resolved_main_url = main_url or config.main_url
     if not resolved_main_url:
         raise ConfigError('main_url is required; use --main_url, DQ_MAIN_URL, or a dq.ini file')
+    parsed = urlsplit(resolved_main_url)
+    if parsed.scheme not in ('http', 'https') or not parsed.hostname:
+        raise ConfigError('main_url must be an HTTP or HTTPS URL with a hostname')
+    if parsed.username is not None or parsed.password is not None:
+        raise ConfigError('use username/password settings instead of credentials in main_url')
     normalized_url = resolved_main_url.rstrip('/')
     path_parts = [unquote(part) for part in urlsplit(normalized_url).path.split('/') if part]
     has_collection_path = bool(path_parts) and path_parts != ['solr']
@@ -91,7 +102,7 @@ def main_url_has_collection(main_url):
     return bool(path_parts) and path_parts != ['solr']
 
 
-def write_config(path, main_url, collection):
+def write_config(path, main_url, collection, username=None, password=None, trust_certificate=None):
     """Atomically update target settings, commenting out changed old values."""
     normalized_main_url = main_url.rstrip('/')
     previous = _read_config(path) if os.path.isfile(path) else DqConfig()
@@ -103,6 +114,14 @@ def write_config(path, main_url, collection):
         lines.append('# Previous collection = {0}'.format(previous.collection))
     if collection:
         lines.append('collection = {0}'.format(collection))
+    for name, value in [('username', username), ('password', password),
+                        ('trust_certificate', trust_certificate)]:
+        if value is None:
+            value = getattr(previous, name)
+        if value is not None:
+            if '\n' in value or '\r' in value:
+                raise ConfigError('{0} must fit on one line'.format(name))
+            lines.append('{0} = {1}'.format(name, value))
     contents = '\n'.join(lines) + '\n'
     try:
         write_text(path, contents)

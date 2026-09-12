@@ -36,10 +36,10 @@ def _table(headers, rows):
 
 def write_empty_fields_report(collection_url, output_path, *, include=(), exclude=(),
                               configuration_path=None, configuration_explicit=False,
-                              option_details=()):
+                              option_details=(), connection=None):
     """Write a Markdown report for stored fields missing from some documents."""
-    total_documents = collection_document_count(collection_url)
-    selected = select_fields(list_fields(collection_url), include=include, exclude=exclude)
+    total_documents = collection_document_count(collection_url, connection=connection)
+    selected = select_fields(list_fields(collection_url, connection=connection), include=include, exclude=exclude)
     stored_fields = [field for field in selected if field.get('stored') is True]
     effective_exclude = exclude if include or exclude else DEFAULT_EXCLUDED_FIELDS
     incomplete = []
