@@ -13,6 +13,8 @@ with open(os.path.join(project, 'src', 'dq', '__init__.py'), encoding='utf-8') a
 setup(
     name='dq',
     version=version,
+    license='Apache-2.0',
+    classifiers=['License :: OSI Approved :: Apache Software License'],
     description='Lightweight data-quality reports for search indexes',
     long_description=readme,
     long_description_content_type='text/markdown',

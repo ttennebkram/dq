@@ -1,28 +1,62 @@
-DQ2
-===
+DQ v2
+-----
 
-DQ2 is a lightweight data-quality reporting tool for Apache Solr,
-Elasticsearch, and OpenSearch. The first development target is:
+DQ v2 is a Search Engine Data Quality Toolkit for Apache Solr, Elasticsearch, and OpenSearch. GitHub repository: [https://github.com/ttennebkram/dq](https://github.com/ttennebkram/dq). DQ v2 is based on the original Data Quality project in the ttennebkram GitHub fork: [https://github.com/ttennebkram/data-quality](https://github.com/ttennebkram/data-quality).
 
-    http://localhost:8983/solr/my-files
+Contents
+--------
 
-DQ2 is based on the original data-quality project in the ttennebkram GitHub
-fork:
+- [Quickstart](#quickstart)
+- [Requirements and dependencies](#requirements-and-dependencies)
+- [Run directly from the project](#run-directly-from-the-project)
+- [Optional development installation](#optional-development-installation)
+- [Basic usage](#basic-usage)
+  - [Export IDs for an empty field](#export-ids-for-an-empty-field)
+- [Configuration](#configuration)
+  - [Saved field filters](#saved-field-filters)
+- [Generated reports and Git](#generated-reports-and-git)
+- [Report behavior](#report-behavior)
+- [Supporting HTTPS](#supporting-https)
+  - [Create a local self-signed Solr certificate](#create-a-local-self-signed-solr-certificate)
+  - [Export the public PEM file](#export-the-public-pem-file)
+  - [Reference the PEM from the DQ project](#reference-the-pem-from-the-dq-project)
+  - [Install the optional Solr helper](#install-the-optional-solr-helper)
+  - [Switch local Solr Basic authentication on or off](#switch-local-solr-basic-authentication-on-or-off)
+- [License](#license)
 
-    https://github.com/ttennebkram/data-quality
+Quickstart
+----------
 
-Status
-------
+The examples use `~/dev/dq` for the project checkout (`~` is your home directory).
+Substitute your own checkout location. Run with Python 3.4.10 or newer; no package
+installation or third-party Python dependencies are needed:
 
-The project currently contains its Python packaging and CLI foundation. The
-planned checks include empty fields, term statistics, Unicode code points,
-dates, document counts, ID comparison, schema comparison, configuration
-comparison, ID export/deletion, Solr-to-Solr copying, CSV export, and Solr
-hash/shard calculation.
+```sh
+cd ~/dev/dq
+./bin/verify-python
+./bin/dq --help
+./bin/dq --main_url http://localhost:8983/solr --collection my-files --write_config
+./bin/dq --report empty_fields
+```
 
-Reports will be written as Markdown with links between report documents. Field
-selection includes all stored fields except names that begin and end with an
-underscore by default and supports shell-style include and exclude patterns.
+Replace the server URL and collection with your own. `--write_config` saves the
+target in `dq.ini`, so later commands can omit it. If Solr requires Basic
+authentication, add `username` and `password` to the INI file under its existing
+`[DEFAULT]` or `[dq]` section before running the report. See
+[Supporting HTTPS](#supporting-https) for certificate and authentication settings.
+
+Open `report_empty_fields.md` in your Markdown viewer. Other available actions:
+
+```sh
+./bin/dq --list_fields
+./bin/dq --ids empty_fields --include_field file_name_s > missing-ids.txt
+```
+
+ID export requires exactly one selected stored field. Field listing and ID export
+write to standard output, without creating a Markdown report.
+
+Releases are planned to offer prebuilt binaries for users who need them. These
+instructions currently assume you run `./bin/dq` directly from the checkout.
 
 Requirements and dependencies
 -----------------------------
@@ -31,29 +65,12 @@ Required software:
 
 * Python 3.4.10 or newer
 
-Python 3.4.10 is the minimum because the code uses dataclasses and postponed
-type annotations. The CLI tests and a live Solr report have been checked with
-Python 3.4.10.9. To test with this machine's separate Python 3.4.10 installation
-without changing the default interpreter:
+Dependencies: No runtime or development dependencies; DQ uses only the Python standard library.
 
-    /Library/Frameworks/Python.framework/Versions/3.7/bin/python3 bin/dq --version
-    PYTHONPATH=src /Library/Frameworks/Python.framework/Versions/3.7/bin/python3 -m unittest discover -s tests
-
-Runtime Python dependencies:
-
-* None. The initial CLI uses only the Python standard library.
-
-Build dependencies, installed automatically by pip when building:
-
-* setuptools 61 or newer
-
-Development dependencies:
-
-* None currently.
-
-No Java, SolrJ, Rust, Node.js, Docker, or native Python extension is required
-to run the CLI. A reachable Solr, Elasticsearch, or OpenSearch server is needed
-to perform a report.
+Python 3.4.10 is the tested compatibility baseline. The code uses ordinary classes,
+``os.path`` and file operations, and ``str.format()`` instead of dataclasses,
+pathlib, type hints, or f-strings. It retains Python's standard ``argparse``
+module, available since Python 3.2. Python 3.0/3.1 are not claimed as supported.
 
 Run directly from the project
 -----------------------------
@@ -61,12 +78,13 @@ Run directly from the project
 No package installation is needed. With Python 3.4.10 or newer available as
 ``python3``, run the executable launcher:
 
-    cd /Users/mbennett/Dropbox/dev/dq
+    cd ~/dev/dq
     ./bin/verify-python
     ./bin/dq --help
     ./bin/dq --version
 
-``bin/verify-python`` checks the same ``python3`` on PATH used by ``bin/dq``.
+``bin/verify-python`` takes no arguments and checks the same ``python3`` on PATH
+used by ``bin/dq``.
 It reports the interpreter path and version, requires Python 3.4.10 or newer,
 checks HTTPS support, and verifies that this checkout's DQ CLI loads. It exits
 with status 0 on success or a nonzero status on failure, with errors on stderr.
@@ -74,7 +92,7 @@ It does not install software, change your environment, or contact Solr.
 
 To use ``dq`` from any directory, add this project's ``bin`` directory to PATH:
 
-    export PATH="/Users/mbennett/Dropbox/dev/dq/bin:$PATH"
+    export PATH="$HOME/dev/dq/bin:$PATH"
     hash -r
     command -v dq
     dq --version
@@ -89,13 +107,19 @@ working directory for config lookup and report output. It uses the ``python3``
 found on PATH, including an activated virtual environment.
 
 Optional development installation
-------------------------
+---------------------------------
 
-    cd /Users/mbennett/Dropbox/dev/dq
+    cd ~/dev/dq
     python3 -m venv .venv
     source .venv/bin/activate
     python -m pip install --upgrade pip
     python -m pip install -e .
+
+On Python 3.4, prefer ``bin/dq`` without installation. If packaging tools are
+needed, compatible versions include ``pip==19.1.1``, ``setuptools==43.0.0``,
+and ``wheel==0.33.6``; do not run an unrestricted pip upgrade on that interpreter.
+Packaging metadata lives in ``setup.py`` so older tools can read it, while
+``pyproject.toml`` supplies the build backend for modern pip.
 
 Basic usage
 -----------
@@ -259,11 +283,17 @@ Configuration
 
 The project includes a template containing every currently supported setting:
 
-    /Users/mbennett/Dropbox/dev/dq/dq.ini.template
+    ~/dev/dq/dq.ini.template
 
 Copy it when starting configuration for another project:
 
-    cp /Users/mbennett/Dropbox/dev/dq/dq.ini.template dq.ini
+    cp ~/dev/dq/dq.ini.template dq.ini
+
+The template lists all supported INI settings: `main_url`, `collection`,
+`username`, `password`, `trust_certificate`, `include_fields`, and `exclude_fields`.
+It also documents the command-line-only options in comments; actions, `--config`,
+`--help`, and `--version` are not INI settings. Update the template, this README,
+and CLI help together whenever options or defaults change.
 
 Edit the copied ``dq.ini`` for that server and collection. The template remains
 unchanged as a reference as more settings are added to DQ.
@@ -407,30 +437,296 @@ The first live report command is:
        --main_url http://localhost:8983/solr \
        --collection my-files
 
-Python compatibility: runtime code uses ordinary classes, os.path and str.format.
-The checkout launcher requires Python 3.4.10 or newer. Run bin/verify-python
-without arguments to check python3 on PATH. Packaging metadata is in setup.py.
+### Saved field filters
 
-HTTPS and authentication
-------------------------
+Store simple glob patterns in `dq.ini`, one per line, indenting additional lines:
 
-Use --username and --password, or username/password in dq.ini, for HTTP Basic
-authentication. CLI values override saved settings. Passwords are redacted from
-reports; --write_config saves credentials without retaining old passwords.
-Use --trust_certificate FILE (or trust_certificate in INI) to trust a PEM CA or
-self-signed certificate. INI paths are relative to the INI directory. Hostname
-checks remain enabled. Protocol-changing redirects are rejected in both directions;
-authenticated redirects are always refused. Use HTTPS for encrypted credentials.
+```ini
+[dq]
+include_fields = file_*
+    content_*
+exclude_fields = *_vector
+    embedding_*
+```
 
-Saved field filters
--------------------
+Patterns are not regex. Do not quote INI patterns or separate them with commas;
+spaces and commas within a pattern are literal. Saved filters apply to reports,
+`--list_fields`, and `--ids`. The ID action still requires exactly one selected
+stored field.
 
-INI include_fields and exclude_fields accept one simple glob per line, with
-indented continuation lines. CLI filters replace the corresponding saved list;
-an empty CLI string clears it. --write_config saves filters, and reports identify
-the source of effective options. Generated report filenames start with report_
-and are ignored by Git; Markdown documentation remains trackable.
+Command-line `--include_fields` replaces the saved include list; `--exclude_fields`
+replaces the saved exclude list independently. Repeat a CLI option to supply
+multiple patterns. Use `--include_fields ''` or `--exclude_fields ''` to clear the
+corresponding saved list for a run. When both effective lists are empty, the
+usual `_*_` exclusion applies; use `--include_fields '*'` to include all names.
+There are no environment variables for field filters.
 
-Copy aux-bin/solr-auth into your Solr installation (local-scripts/ or bin/).
-See aux-bin/README.md. It stores reusable local credentials and security backups
-under Solr, toggles Basic authentication, and optionally restarts the local node.
+`--write_config` saves the effective filters and preserves previous changed
+filter values as comments. The report summary displays the effective patterns,
+and Options Used identifies whether they came from CLI, INI, or defaults.
+
+Generated reports and Git
+-------------------------
+
+Generated report filenames use the reserved `report_` prefix, for example
+`report_empty_fields.md`. `.gitignore` excludes `report_*` files so reports stay
+out of commits while `README.md` and documentation under `docs/` remain trackable.
+Keep checked-in documentation names outside that prefix. The older
+`empty_fields.md` output remains ignored for existing working directories.
+Git ignore rules do not untrack files that were already committed.
+
+Report behavior
+---------------
+
+Reports use Markdown with internal links. Field filters use simple glob patterns
+and exclude names beginning and ending with an underscore by default;
+`empty_fields` checks selected stored fields.
+
+## Supporting HTTPS
+
+DQ uses exactly the protocol specified in `main_url`. It never switches from
+HTTP to HTTPS or from HTTPS to HTTP, including server redirects. A redirect
+that changes protocol produces an error; there is no automatic fallback.
+Same-protocol redirects remain allowed for unauthenticated requests.
+
+HTTPS verifies the server certificate and
+hostname. For certificates trusted by Python's default certificate store, no
+additional option is needed. Python's store may differ from the macOS Keychain.
+
+For a private certificate authority or a self-signed Solr certificate:
+
+```sh
+dq --report empty_fields --trust_certificate certificates/solr-ca.pem
+```
+
+`--trust-certificate` is an alias. Supply a PEM file containing the trusted CA
+certificate, or the server's public certificate if self-signed. A certificate
+name alone is insufficient. This adds trust without disabling hostname checks.
+DQ does not need the server's private key. Client-certificate authentication
+(mutual TLS) and certificate-fingerprint pinning are not implemented.
+
+HTTP Basic authentication can be configured with `--username` and `--password`,
+or saved in the INI file:
+
+```ini
+[dq]
+main_url = https://localhost:8983/solr
+collection = my-files
+username = mark
+password = replace-with-your-password
+trust_certificate = certificates/solr-ca.pem
+```
+
+CLI values override the corresponding INI values. Username and password must be
+supplied together. Passwords are literal, including `%` characters. Certificate
+paths from INI are relative to that INI file; command-line paths are relative to
+the current directory. No new authentication environment variables are used.
+
+The INI file stores the password in plaintext. Prefer it to `--password` on the
+command line, which can appear in shell history or process listings. Use HTTPS
+for encrypted credentials in transit. URLs containing embedded credentials are
+rejected. Authenticated redirects are refused to avoid forwarding credentials.
+
+`--write_config` saves these settings and creates the resulting file with
+owner-only permissions (0600 on Unix). An updated password replaces the old one
+without retaining it in a comment. Passwords are redacted in the report's
+Options Used section and excluded from authenticated HTTP error response bodies.
+Keep custom config filenames out of version control too; `.gitignore` already
+excludes `dq.ini`. For a manually created INI, run `chmod 600 dq.ini`.
+
+HTTPS client support does not enable HTTPS on Solr. Solr itself must be configured
+with a server certificate and private key before changing its URL to `https://`.
+
+
+### Create a local self-signed Solr certificate
+
+Solr needs a keystore containing its server certificate and private key. DQ
+needs only the public certificate, exported as PEM. These steps use the local
+Solr installation below and require the JDK's `keytool` command.
+
+For a new keystore, create a certificate valid for 3,650 days (about ten years):
+
+```sh
+cd ~/dev/solr-9.10.1
+mkdir -p server/etc/certificates
+chmod 700 server/etc/certificates
+
+keytool -genkeypair \
+  -alias solr-local \
+  -keyalg RSA \
+  -keysize 2048 \
+  -validity 3650 \
+  -storetype PKCS12 \
+  -keystore server/etc/certificates/solr-local.p12 \
+  -dname "CN=localhost" \
+  -ext "SAN=DNS:localhost,IP:127.0.0.1,IP:::1"
+```
+
+Choose a keystore password at the prompt. Solr's documentation uses `secret`
+for its local HTTPS example; this is not a default Solr login password. Keep the
+keystore password for the server's HTTPS configuration. The certificate covers
+`localhost`, IPv4 loopback (`127.0.0.1`), and IPv6 loopback (`::1`).
+
+Do not repeat `-genkeypair` for an existing `solr-local` alias. If the certificate
+was already created with `-validity 365`, reissue the self-signed certificate
+using the existing key and a longer validity period:
+
+```sh
+keytool -selfcert \
+  -alias solr-local \
+  -keystore ~/dev/solr-9.10.1/server/etc/certificates/solr-local.p12 \
+  -validity 3650 \
+  -ext "SAN=DNS:localhost,IP:127.0.0.1,IP:::1"
+```
+
+### Export the public PEM file
+
+Export after creating or reissuing the certificate, entering the same keystore
+password when prompted:
+
+```sh
+keytool -exportcert -rfc \
+  -alias solr-local \
+  -keystore ~/dev/solr-9.10.1/server/etc/certificates/solr-local.p12 \
+  -file ~/dev/solr-9.10.1/server/etc/certificates/solr-local.pem
+```
+
+This exports the public certificate only, without the private key. To inspect
+its validity dates and subject alternative names:
+
+```sh
+keytool -printcert \
+  -file ~/dev/solr-9.10.1/server/etc/certificates/solr-local.pem
+```
+
+### Reference the PEM from the DQ project
+
+Reference the certificate directly in `~/dev/dq/dq.ini`, under its existing
+`[DEFAULT]` or `[dq]` section. No copy or symlink in the project is necessary:
+
+```ini
+trust_certificate = ~/dev/solr-9.10.1/server/etc/certificates/solr-local.pem
+```
+
+The project's `dq.ini` is ignored by Git. Keeping one PEM file means subsequent
+DQ runs use the updated certificate after it is re-exported to the same path.
+The certificate file does not contain, and DQ does not need, the keystore password.
+
+Certificate creation and export do not enable an HTTPS listener. The intended
+local arrangement is HTTP on port 8983 and HTTPS on port 8984, serving the same
+collection. Configuring Solr's listeners is a separate server setup step.
+After the HTTPS listener is configured, the DQ target settings would be:
+
+```ini
+main_url = https://localhost:8984/solr
+collection = my-files
+trust_certificate = ~/dev/solr-9.10.1/server/etc/certificates/solr-local.pem
+```
+
+Then run `dq --report empty_fields`. DQ will use HTTPS exactly as specified;
+it will not switch protocols. Trusting this PEM in DQ does not install it into
+the browser's certificate store.
+
+See the [Solr HTTPS documentation](https://solr.apache.org/guide/solr/9_10/deployment-guide/enabling-ssl.html)
+for the keystore and server configuration reference.
+
+### Install the optional Solr helper
+
+DQ distributes `solr-auth` in [aux-bin/](aux-bin/README.md). Copy it into the
+Solr installation before using it. It is a standalone helper and does not
+require DQ to be installed or remain at its current path.
+
+Recommended location: `local-scripts/` under the Solr installation. From the
+DQ project directory:
+
+```sh
+mkdir -p ~/dev/solr-9.10.1/local-scripts
+cp aux-bin/solr-auth ~/dev/solr-9.10.1/local-scripts/solr-auth
+chmod +x ~/dev/solr-9.10.1/local-scripts/solr-auth
+```
+
+Alternatively, copy it into Solr's existing `bin/` directory:
+
+```sh
+cp aux-bin/solr-auth ~/dev/solr-9.10.1/bin/solr-auth
+chmod +x ~/dev/solr-9.10.1/bin/solr-auth
+```
+
+You can also copy it directly into the Solr installation root. The helper
+detects the installation from its own location in any of these three layouts.
+Use `--solr_dir DIR` to specify the installation explicitly when running it
+from elsewhere, including directly from DQ's `aux-bin/`.
+
+Choose one installed location. The examples below use `local-scripts/`; use
+`bin/solr-auth` or `./solr-auth` instead if you chose another location. After
+updating the helper in DQ, repeat the copy to update your installed copy.
+Copying the script does not change authentication or overwrite the saved login.
+The password file is always `local-auth.ini` in the selected Solr installation
+root, never in DQ's `aux-bin/`.
+
+### Switch local Solr Basic authentication on or off
+
+The development server normally runs without a login. Use the helper in the Solr installation when testing authentication:
+
+```sh
+cd ~/dev/solr-9.10.1
+./local-scripts/solr-auth status
+./local-scripts/solr-auth on
+./local-scripts/solr-auth off
+```
+
+On the first `on`, the helper prompts for a username and password and saves them
+in plaintext in `local-auth.ini` under the Solr installation, with owner-only
+permissions. Later `on` commands reuse that login without prompting. `off` keeps
+the saved login for next time. This is separate from the certificate keystore
+password. To replace the saved login, first turn authentication off, then run:
+
+```sh
+./local-scripts/solr-auth on --set_credentials
+```
+
+The helper passes the saved login to Solr's native `--credentials` option, so it
+can briefly appear in a local process listing. This convenience is intended for
+this local test installation. The helper does not print the saved password.
+
+`off` invokes the native disable command, returning to anonymous
+local access. The change applies to both HTTP and HTTPS listeners; the helper
+does not change protocols, TLS configuration, certificates, or collection data.
+
+SolrCloud applies security changes live through ZooKeeper, so a restart is
+normally unnecessary. To explicitly restart as part of the switch:
+
+```sh
+./local-scripts/solr-auth on --restart
+./local-scripts/solr-auth off --restart
+```
+
+The helper lives in the Solr installation's `local-scripts/` directory and targets
+that installation by default, port 8983,
+and embedded ZooKeeper on loopback port 9983. Solr must already be running.
+Use `--solr_dir DIR` and `--port PORT` if those local defaults change. Restart
+uses SolrCloud mode and advertises localhost; keep persistent listener settings
+in the Solr installation's configuration files. This is a local development
+helper, not a general cluster administration tool.
+
+Before changing authentication, the helper saves `security.json`, `solr.in.sh`,
+and any existing `basicAuth.conf` under the Solr installation's
+`local-auth-backups/`, with owner-only permissions. Solr's native disable command
+also removes authorization settings; the backup retains the prior configuration.
+The helper refuses to replace non-Basic authentication plugins. Enabling an
+already configured authentication plugin is also refused.
+
+The helper does not edit `dq.ini`. Use the chosen login in DQ when authentication
+is on; omit the `username` and `password` settings during normal unauthenticated
+local testing. Keep anonymous Solr access restricted to the local machine.
+
+The saved login file is
+`~/dev/solr-9.10.1/local-auth.ini`.
+The installed helper runs independently of DQ; its distributable source is in
+DQ's `aux-bin/`.
+
+License
+-------
+
+DQ uses the Apache License 2.0, which permits commercial use, modification, and incorporation into your own proprietary code, subject to its terms.
+See [LICENSE.txt](LICENSE.txt) for the full license.

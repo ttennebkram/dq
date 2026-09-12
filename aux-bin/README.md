@@ -32,3 +32,9 @@ Use `--solr_dir DIR` when running from outside the Solr installation. The defaul
 Solr port is 8983, with embedded ZooKeeper on 9983; `--port` changes these defaults.
 The installed copy has no dependency on the DQ checkout. Recopy after updating
 this source; copies are not synchronized automatically.
+
+## License
+
+These scripts are licensed under [Apache 2.0](../LICENSE.txt), including commercial
+and proprietary use subject to its terms. Include the LICENSE.txt when redistributing
+the scripts.
