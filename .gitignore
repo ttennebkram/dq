@@ -13,7 +13,10 @@ htmlcov/
 # Local DQ target configuration; use dq.ini.template as the tracked example.
 dq.ini
 
-# Generated report when DQ is run from the project root.
+# Generated reports; keep documentation outside the reserved report_ prefix.
+report_*
+
+# Legacy report filename.
 /empty_fields.md
 
 .DS_Store

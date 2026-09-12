@@ -145,7 +145,7 @@ The accepted report names are ``empty_fields``, ``term_stats``,
 other three reports are planned.
 
 The empty-fields report examines selected stored fields and writes
-``empty_fields.md`` in the current directory:
+``report_empty_fields.md`` in the current directory:
 
     dq --report empty_fields
 
@@ -421,3 +421,12 @@ Use --trust_certificate FILE (or trust_certificate in INI) to trust a PEM CA or
 self-signed certificate. INI paths are relative to the INI directory. Hostname
 checks remain enabled. Protocol-changing redirects are rejected in both directions;
 authenticated redirects are always refused. Use HTTPS for encrypted credentials.
+
+Saved field filters
+-------------------
+
+INI include_fields and exclude_fields accept one simple glob per line, with
+indented continuation lines. CLI filters replace the corresponding saved list;
+an empty CLI string clears it. --write_config saves filters, and reports identify
+the source of effective options. Generated report filenames start with report_
+and are ignored by Git; Markdown documentation remains trackable.

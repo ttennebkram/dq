@@ -1,7 +1,12 @@
-# DQ2 configuration template
+# DQ v2 configuration template
 #
 # Copy this file to dq.ini in a project directory, then edit the values.
 # DQ searches the current directory and its parents for dq.ini.
+# All supported INI keys are shown below, including optional commented examples.
+# Keep this template, README.md, and dq --help in sync when options change.
+# [dq] is also supported; its values override [DEFAULT] values.
+# CLI values override these settings. DQ_MAIN_URL and DQ_COLLECTION also override
+# default-file values, but are ignored when an explicit --config FILE is used.
 
 [DEFAULT]
 # Base URL for Solr, Elasticsearch, or OpenSearch.
@@ -12,8 +17,43 @@ main_url = http://localhost:8983/solr
 # includes it, for example: http://localhost:8983/solr/my-files
 collection = my-files
 
-# Optional Basic authentication (use HTTPS):
-# username = solr
+# Optional field filters: simple glob patterns, not regex, one per line.
+# Indent continuation lines; do not quote patterns or separate them with commas.
+# include_fields = file_*
+#     content_*
+# exclude_fields = *_vector
+#     embedding_*
+# CLI filters replace the corresponding saved list; an empty CLI string clears it.
+# If both effective lists are empty, DQ uses its default exclusion of _*_.
+
+# Optional HTTP Basic authentication. Use HTTPS for encrypted credentials.
+# Values are plaintext; protect your dq.ini with chmod 600 and keep it out of Git.
+# username = mark
 # password = replace-with-your-password
-# Optional PEM CA or self-signed certificate, relative to this INI file:
+
+# Optional PEM private-CA or self-signed server certificate (no private key).
+# Relative paths are resolved against this INI file's directory.
 # trust_certificate = certificates/solr-ca.pem
+
+# Command-line-only options (do not add these as INI keys):
+# Choose one action:
+#   --report / --reports NAME [NAME ...]
+#     empty_fields implemented; term_stats, code_points, date_checker planned.
+#   --ids / -id empty_fields
+#   --list_fields / --list-fields
+#   --write_config / --write-config
+# Other command-line-only options:
+#   --config FILE
+#   --help / -h
+#   --version
+# Command-line aliases for the INI settings above:
+#   --main_url / --main-url URL
+#   --collection / --index NAME
+#   --username NAME
+#   --password PASSWORD
+#   --trust_certificate / --trust-certificate FILE
+
+# CLI overrides for the saved field filters above (repeatable):
+#   --include_fields / --include_field / --include-fields / --include-field PATTERN
+#   --exclude_fields / --exclude_field / --exclude-fields / --exclude-field PATTERN
+#   Without either filter, field names matching _*_ are excluded.

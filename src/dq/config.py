@@ -12,13 +12,16 @@ class ConfigError(ValueError):
 class DqConfig:
     """Resolved target settings and the file they came from."""
 
-    def __init__(self, main_url=None, collection=None, source=None, username=None, password=None, trust_certificate=None):
+    def __init__(self, main_url=None, collection=None, source=None, username=None, password=None, trust_certificate=None,
+                 include_fields=None, exclude_fields=None):
         self.main_url = main_url
         self.collection = collection
         self.source = source
         self.username = username
         self.password = password
         self.trust_certificate = trust_certificate
+        self.include_fields = include_fields
+        self.exclude_fields = exclude_fields
 
 
 def _project_config(start):
@@ -31,6 +34,13 @@ def _project_config(start):
         if parent == directory:
             return None
         directory = parent
+
+
+def _patterns(value):
+    """INI patterns are one per line; spaces and commas within names are literal."""
+    if value is None:
+        return None
+    return [line.strip() for line in value.splitlines() if line.strip()]
 
 
 def _read_config(path):
@@ -46,7 +56,9 @@ def _read_config(path):
     return DqConfig(main_url=values.get('main_url'),
                     collection=values.get('collection'), source=absolute_path(path),
                     username=values.get('username'), password=values.get('password'),
-                    trust_certificate=values.get('trust_certificate'))
+                    trust_certificate=values.get('trust_certificate'),
+                    include_fields=_patterns(values.get('include_fields')),
+                    exclude_fields=_patterns(values.get('exclude_fields')))
 
 
 def load_config(explicit_path=None, start=None):
@@ -65,7 +77,8 @@ def load_config(explicit_path=None, start=None):
         return config
     return DqConfig(main_url=os.environ.get('DQ_MAIN_URL', config.main_url), collection=os.environ.get(
         'DQ_COLLECTION', config.collection), source=config.source, username=config.username, password=config.password,
-        trust_certificate=config.trust_certificate)
+        trust_certificate=config.trust_certificate, include_fields=config.include_fields,
+        exclude_fields=config.exclude_fields)
 
 
 def collection_url(config, *, main_url=None, collection=None):
@@ -102,7 +115,8 @@ def main_url_has_collection(main_url):
     return bool(path_parts) and path_parts != ['solr']
 
 
-def write_config(path, main_url, collection, username=None, password=None, trust_certificate=None):
+def write_config(path, main_url, collection, username=None, password=None, trust_certificate=None,
+                 include_fields=None, exclude_fields=None):
     """Atomically update target settings, commenting out changed old values."""
     normalized_main_url = main_url.rstrip('/')
     previous = _read_config(path) if os.path.isfile(path) else DqConfig()
@@ -122,6 +136,18 @@ def write_config(path, main_url, collection, username=None, password=None, trust
             if '\n' in value or '\r' in value:
                 raise ConfigError('{0} must fit on one line'.format(name))
             lines.append('{0} = {1}'.format(name, value))
+    for name, patterns in [('include_fields', include_fields), ('exclude_fields', exclude_fields)]:
+        old_patterns = getattr(previous, name)
+        if patterns is None:
+            patterns = old_patterns
+        if patterns is not None:
+            if any('\n' in pattern or '\r' in pattern for pattern in patterns):
+                raise ConfigError('{0} patterns must each fit on one line'.format(name))
+            if old_patterns is not None and old_patterns != patterns:
+                lines.append('# Previous {0}:'.format(name))
+                lines.extend('#   ' + pattern for pattern in old_patterns)
+            lines.append(name + ' =')
+            lines.extend('    ' + pattern for pattern in patterns)
     contents = '\n'.join(lines) + '\n'
     try:
         write_text(path, contents)

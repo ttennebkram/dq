@@ -29,6 +29,25 @@ def _configured_value_source(*, command_line_value, environment_name, config, ex
     return 'not set'
 
 
+def _resolve_field_filters(options, config):
+    sources = {}
+    for name in ('include_fields', 'exclude_fields'):
+        command_line = getattr(options, name)
+        saved = getattr(config, name)
+        if command_line:
+            patterns = [pattern for pattern in command_line if pattern]
+            sources[name] = 'command line'
+        elif saved is not None:
+            patterns = list(saved)
+            origin = 'specified by --config' if options.config else 'default configuration'
+            sources[name] = 'configuration file {0} ({1})'.format(config.source, origin)
+        else:
+            patterns = []
+            sources[name] = 'built-in default'
+        setattr(options, name, patterns)
+    options.field_filter_sources = sources
+
+
 def _report_option_details(options, config, target, output_path):
     main_url = options.main_url or config.main_url or ''
     main_url_source = _configured_value_source(
@@ -77,6 +96,8 @@ def _report_option_details(options, config, target, output_path):
         elif name == 'password':
             value = '[redacted]'
         details.append((name, value, source))
+    sources = getattr(options, 'field_filter_sources', {})
+    details = [(name, value, sources.get(name, source)) for name, value, source in details]
     return details
 
 
@@ -133,6 +154,8 @@ field selection; --ids requires exactly one selected stored field.""",
 Saved target configuration:
   dq.ini in the current directory or a parent directory
   ~/.config/dq/config.ini as the user fallback
+  INI include_fields/exclude_fields: one glob per line, indent continuation lines
+  CLI filters replace the corresponding saved list; use an empty string to clear it
 
 Reports:
   empty_fields   IMPLEMENTED - find fields that are not fully populated
@@ -198,7 +221,7 @@ Project documentation:
         metavar="PATTERN",
         action="append",
         default=[],
-        help="include field names matching a simple glob, not a regex; repeatable",
+        help="include simple glob patterns; repeatable; overrides INI include_fields; use '' to clear",
     )
     parser.add_argument(
         "--exclude_fields",
@@ -208,7 +231,7 @@ Project documentation:
         metavar="PATTERN",
         action="append",
         default=[],
-        help="exclude field names matching a simple glob, not a regex; repeatable",
+        help="exclude simple glob patterns; repeatable; overrides INI exclude_fields; use '' to clear",
     )
     parser.add_argument(
         "--main_url",
@@ -254,6 +277,7 @@ def main(argv=None):
         written = 0
         try:
             config = load_config(options.config)
+            _resolve_field_filters(options, config)
             connection = make_connection(options, config)
             target = collection_url(config, main_url=options.main_url,
                                     collection=options.collection)
@@ -309,7 +333,9 @@ def main(argv=None):
             values = connection_values(options, config)
             if (values['username'] is None) != (values['password'] is None):
                 raise ConfigError('username and password must be supplied together')
-            write_config(output_path, resolved_main_url, resolved_collection, **values)
+            _resolve_field_filters(options, config)
+            write_config(output_path, resolved_main_url, resolved_collection,
+                         include_fields=options.include_fields, exclude_fields=options.exclude_fields, **values)
             print('Wrote configuration: {0}'.format(output_path))
         except ConfigError as error:
             parser.exit(2, 'dq: error: {0}\n'.format(error))
@@ -317,6 +343,7 @@ def main(argv=None):
     if options.list_fields:
         try:
             config = load_config(options.config)
+            _resolve_field_filters(options, config)
             connection = make_connection(options, config)
             target = collection_url(config, main_url=options.main_url,
                                     collection=options.collection)
@@ -328,6 +355,7 @@ def main(argv=None):
     if options.report:
         try:
             config = load_config(options.config)
+            _resolve_field_filters(options, config)
             connection = make_connection(options, config)
             target = collection_url(config, main_url=options.main_url,
                                     collection=options.collection)
@@ -335,7 +363,7 @@ def main(argv=None):
             if unimplemented:
                 names = ', '.join(dict.fromkeys(unimplemented))
                 raise ReportError('report not implemented yet: {0}'.format(names))
-            output_path = os.path.join(os.getcwd(), 'empty_fields.md')
+            output_path = os.path.join(os.getcwd(), 'report_empty_fields.md')
             write_empty_fields_report(target, output_path, include=options.include_fields, exclude=options.exclude_fields, configuration_path=config.source,
                                       configuration_explicit=bool(options.config), option_details=_report_option_details(options, config, target, output_path), connection=connection)
             print('Wrote report: {0}'.format(output_path))

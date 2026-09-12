@@ -88,7 +88,7 @@ class CliTests(unittest.TestCase):
              redirect_stdout(io.StringIO()):
             self.assertEqual(main(["--report", "empty_fields", "empty_fields",
                                    "--reports", "empty_fields"]), 0)
-        self.assertEqual(os.path.basename(write.call_args[0][1]), "empty_fields.md")
+        self.assertEqual(os.path.basename(write.call_args[0][1]), "report_empty_fields.md")
         details = write.call_args[1]["option_details"]
         self.assertEqual(details[0][1], "empty_fields, empty_fields, empty_fields")
 
