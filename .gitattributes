@@ -1,0 +1,2 @@
+# Keep Windows launchers as CRLF in working trees and GitHub ZIP downloads.
+*.cmd text eol=crlf

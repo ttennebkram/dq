@@ -7,9 +7,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from dq.cli import build_parser
+from dq.main import build_parser
 from dq.config import load_config, collection_url, write_config
-from dq.reports import write_empty_fields_report
 from dq.solr import get_json, SolrError
 
 
@@ -46,30 +45,26 @@ class CompatibilityTests(unittest.TestCase):
             with self.assertRaises(SolrError):
                 get_json('http://solr/c', 'select')
 
-    def test_report_tables_order_and_escaping(self):
-        fields = [{'name': 'title_s', 'type': 'string', 'stored': True, 'documents': 1},
-                  {'name': '_hidden_', 'type': 'string', 'stored': True, 'documents': 0}]
-        with tempfile.TemporaryDirectory() as directory:
-            path = os.path.join(directory, 'report.md')
-            with patch('dq.reports.collection_document_count', return_value=2), \
-                 patch('dq.reports.list_fields', return_value=fields):
-                write_empty_fields_report('http://solr/c', path,
-                                          option_details=[('include', 'a|b', 'command line')])
-            with open(path, encoding='utf-8') as stream:
-                text = stream.read()
-            self.assertLess(text.index('## Summary'), text.index('## Options Used'))
-            self.assertLess(text.index('## Options Used'), text.index('## Fields'))
-            self.assertIn('a\\|b', text)
-            self.assertIn('50.00%', text)
-            self.assertNotIn('_hidden_', text)
-            self.assertIn('- [Fields](#fields)', text)
-
     def test_exact_options_and_equals_syntax(self):
-        options = build_parser().parse_args(['--main-url=http://solr/c', '-id', 'empty_fields'])
+        options = build_parser().parse_args(['--main-url=http://solr/c', '--rule', 'missing_fields', '--action', 'csv'])
         self.assertEqual(options.main_url, 'http://solr/c')
         with patch('sys.stderr', io.StringIO()), self.assertRaises(SystemExit) as error:
             build_parser().parse_args(['--incl', 'title_s'])
         self.assertEqual(error.exception.code, 2)
+
+    def test_help_option_order_and_conventional_processor_directory(self):
+        help_text = build_parser().format_help()
+        option_text = help_text[help_text.index('Configuration, Target, and Output:'):]
+        ordered = ['--config FILE', '--main_url URL', '--collection NAME',
+                   '--list_fields', '--username NAME', '--password PASSWORD',
+                   '--reports_dir DIR', '--rows N, --size N']
+        positions = [option_text.index(item) for item in ordered]
+        self.assertEqual(positions, sorted(positions))
+        self.assertNotIn('--processor_dir', help_text)
+        self.assertIn('Configuration options:', help_text)
+        self.assertIn('Rules:\n', help_text)
+        self.assertIn('--list_reports', help_text)
+        self.assertIn('--list_rules', help_text)
 
 
 if __name__ == '__main__':

@@ -14,6 +14,7 @@ setup(
     name='dq',
     version=version,
     license='Apache-2.0',
+    license_files=['LICENSE.txt'],
     classifiers=['License :: OSI Approved :: Apache Software License'],
     description='Lightweight data-quality reports for search indexes',
     long_description=readme,
@@ -21,6 +22,7 @@ setup(
     python_requires='>=3.4.10',
     package_dir={'': 'src'},
     packages=find_packages('src'),
+    package_data={'dq.processors.regex': ['presets/*.ini', 'presets/*.regex']},
     install_requires=[],
-    entry_points={'console_scripts': ['dq=dq.cli:main']},
+    entry_points={'console_scripts': ['dq=dq.main:main']},
 )

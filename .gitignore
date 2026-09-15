@@ -13,10 +13,17 @@ htmlcov/
 # Local DQ target configuration; use dq.ini.template as the tracked example.
 dq.ini
 
-# Generated reports; keep documentation outside the reserved report_ prefix.
-report_*
-
-# Legacy report filename.
-/empty_fields.md
+# Generated report directory; retain its short guide.
+/reports/**/*.md
+/reports/**/*.csv
+/reports/**/*.svg
+/reports/**/processing-stats.jsonl
 
 .DS_Store
+
+# Generated synthetic data (in cwd or a chosen output directory).
+documents-solr.json
+expected-results.json
+
+# Shared Elasticsearch/OpenSearch bulk payload.
+documents-es.ndjson

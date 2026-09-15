@@ -1,0 +1,36 @@
+# Phone-number format based on the North American Numbering Plan (NANP).
+# This checks the shape of a number, not whether it is assigned or reachable.
+# NANP is shared by the US, Canada, and other territories, so a match does not
+# establish that the number belongs to the US.
+#
+# us_phone.ini enables verbose mode and case-insensitive matching and requires
+# the entire stored value to match. In verbose mode, spaces outside character
+# classes are formatting; [ ] explicitly matches an ordinary space.
+#
+# Examples: 2125551234, (212) 555-1234, +1 212.555.1234, 212-555-1234 ext. 56
+
+# Optional country code: 1 or +1; the plus sign (+) is literal.
+# [ .-]? allows no separator or one ordinary space ( ), period (.), or hyphen (-).
+(?: \+?1 [ .-]? )?
+
+# Three-digit area code, either enclosed in literal parentheses ( and )
+# or written bare. Parentheses must appear as a pair.
+# Its first digit must be 2-9; the remaining two digits may be 0-9.
+(?: \([2-9][0-9]{2}\) | [2-9][0-9]{2} )
+
+# Optional separator: one ordinary space ( ), period (.), or hyphen (-).
+# No separator is also allowed. Then comes the three-digit exchange (2-9 first).
+[ .-]? [2-9][0-9]{2}
+
+# Optional separator: one ordinary space ( ), period (.), or hyphen (-),
+# or no separator. Then exactly four digits for the subscriber number.
+# Separators are independent: 212.555-1234 is accepted, for example.
+# Tabs, slashes (/), and multiple spaces are not accepted at these separators.
+[ .-]? [0-9]{4}
+
+# Optional extension: literal ext, ext., or x, followed by one or more digits.
+# The period (.) after ext is optional; x does not accept a following period.
+# Zero or more ordinary spaces ( ) may precede the label and its digits.
+# These extension spaces do not allow periods (.), hyphens (-), or tabs.
+# Case-insensitive matching also accepts EXT or X. No trailing spaces allowed.
+(?: [ ]* (?:ext\.?|x) [ ]* [0-9]+ )?

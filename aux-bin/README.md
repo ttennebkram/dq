@@ -3,12 +3,12 @@
 These optional helpers support local development and testing. The main DQ
 command remains in `bin/dq`.
 
-## solr-auth
+## solr-auth.py
 
 A standalone Python 3.4.10+ helper for enabling, disabling, and inspecting Basic
 authentication on a local SolrCloud installation with embedded ZooKeeper.
 
-Copy `solr-auth` into the target Solr installation's `local-scripts/` directory
+Copy `solr-auth.py` into the target Solr installation's `local-scripts/` directory
 (recommended), its existing `bin/` directory, or the installation root. Make the
 copied script executable with `chmod +x`. See the
 [main README installation instructions](../README.md#install-the-optional-solr-helper)
@@ -17,9 +17,9 @@ for full commands.
 From the Solr installation root, using the recommended layout:
 
 ```sh
-./local-scripts/solr-auth status
-./local-scripts/solr-auth on
-./local-scripts/solr-auth off
+./local-scripts/solr-auth.py status
+./local-scripts/solr-auth.py on
+./local-scripts/solr-auth.py off
 ```
 
 The first `on` prompts for credentials and saves them in plaintext in the Solr

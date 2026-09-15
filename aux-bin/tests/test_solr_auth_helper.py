@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-helper = runpy.run_path(os.path.join(os.path.dirname(__file__), '..', 'solr-auth'))
+helper = runpy.run_path(os.path.join(os.path.dirname(__file__), '..', 'solr-auth.py'))
 saved_credentials = helper['saved_credentials']
 
 

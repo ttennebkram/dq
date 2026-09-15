@@ -8,7 +8,8 @@ import unittest
 from urllib.error import HTTPError, URLError
 from urllib.request import Request
 from unittest.mock import patch
-from dq.cli import build_parser, _report_option_details
+from dq.arguments import build_parser
+from dq.settings import _report_option_details
 from dq.config import DqConfig, ConfigError, collection_url, load_config, write_config
 from dq.connection import Connection, NoRedirect, SameSchemeRedirect, connection_values
 
@@ -38,8 +39,8 @@ class ConnectionTests(unittest.TestCase):
     def test_password_redacted_in_options(self):
         config = DqConfig(main_url='https://solr/solr', collection='files',
                           username='mark', password='secret')
-        options = build_parser().parse_args(['--report', 'empty_fields'])
-        options.report = ['empty_fields']
+        options = build_parser().parse_args(['--report', 'quick_checkup'])
+        options.report = ['quick_checkup']
         details = _report_option_details(options, config, 'https://solr/solr/files', 'out.md')
         self.assertNotIn('secret', repr(details))
         self.assertIn('[redacted]', repr(details))
@@ -94,6 +95,10 @@ class ConnectionTests(unittest.TestCase):
 
     def test_no_config_fallback(self):
         with tempfile.TemporaryDirectory() as directory:
+            user_directory = os.path.join(directory, '.config', 'dq')
+            os.makedirs(user_directory)
+            with open(os.path.join(user_directory, 'config.ini'), 'w') as stream:
+                stream.write('[dq]\nmain_url=http://should-not-load/solr\n')
             with patch.dict(os.environ, {'HOME': directory}, clear=True):
                 self.assertIsNone(load_config(start=directory).source)
 

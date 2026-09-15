@@ -1,5 +1,6 @@
 """Small standard-library client for the Solr APIs used by DQ."""
 import json
+import re
 from fnmatch import fnmatchcase
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
@@ -36,10 +37,36 @@ def get_json(collection_url, path, connection=None, **parameters):
         raise SolrError('Solr returned an invalid JSON response from {0}'.format(url)) from error
 
 
+def presence_query(field_name, missing=False, function=False):
+    """Use the same escaped existence query in API requests and report links."""
+    escaped = re.sub(r'([^a-zA-Z0-9_])', r'\\\1', field_name)
+    if function:
+        return ('{!frange l=0 u=0}' if missing else '{!frange l=1}') + 'exists($dq_field)'
+    return '{!lucene}' + ('(*:* AND -' + escaped + ':*)' if missing else escaped + ':*')
+
+
+def _presence_json(collection_url, field_name, connection=None, missing=False,
+                   function=False, **parameters):
+    """Use indexed presence, with a function fallback for vector field types."""
+    query = presence_query(field_name, missing=missing, function=function)
+    try:
+        response = get_json(collection_url, 'select', connection=connection,
+                            fq=query, dq_field=field_name, **parameters)
+        return response, function
+    except SolrError as error:
+        # Dense vectors reject wildcard presence with HTTP 400, but support
+        # exists(). Do not hide authentication, server, or connectivity errors.
+        cause = error.__cause__
+        if function or not isinstance(cause, HTTPError) or cause.code != 400:
+            raise
+        return _presence_json(collection_url, field_name, connection=connection,
+                              missing=missing, function=True, **parameters)
+
+
 def field_document_count(collection_url, field_name, connection=None):
     """Count documents containing a field, including point and vector fields."""
-    response = get_json(collection_url, 'select', connection=connection, q='*:*',
-                        fq='{!frange l=1}exists($dq_field)', dq_field=field_name, rows=0, wt='json')
+    response, _ = _presence_json(collection_url, field_name, connection=connection,
+                                 q='*:*', rows=0, wt='json')
     result = response.get('response')
     count = result.get('numFound') if isinstance(result, dict) else None
     if not isinstance(count, int):
@@ -65,10 +92,16 @@ def list_fields(collection_url, *, include_counts=True, connection=None):
     definitions = schema_response.get('fields')
     if not isinstance(definitions, list):
         raise SolrError('Solr Schema API response did not contain a fields list')
+    type_response = get_json(collection_url, 'schema/fieldtypes', connection=connection, wt='json')
+    types = type_response.get('fieldTypes')
+    if not isinstance(types, list):
+        raise SolrError('Solr Schema API response did not contain field types')
+    type_classes = dict((t['name'], str(t.get('class', ''))) for t in types)
     luke_response = get_json(collection_url, 'admin/luke', connection=connection, numTerms=0, wt='json')
     concrete_fields = luke_response.get('fields')
     if not isinstance(concrete_fields, dict):
         raise SolrError('Solr Luke API response did not contain a fields object')
+    unique_key = get_json(collection_url, 'schema/uniquekey', connection=connection, wt='json').get('uniqueKey')
     by_name = {str(field.get('name')): field for field in definitions}
     dynamic = [field for field in definitions if '*' in str(field.get('name', ''))]
     result = []
@@ -81,6 +114,8 @@ def list_fields(collection_url, *, include_counts=True, connection=None):
         field = dict(definition)
         schema_name = str(field.get('name', ''))
         field['name'] = name
+        field['uniqueKey'] = name == unique_key
+        field['typeClass'] = type_classes.get(field.get('type'), '')
         field['schemaField'] = schema_name if schema_name != name else ''
         if isinstance(luke_properties, dict):
             field['documents'] = luke_properties.get('docs', '')
@@ -92,15 +127,17 @@ def list_fields(collection_url, *, include_counts=True, connection=None):
 
 
 def missing_id_pages(collection_url, field_name, *, page_size=1000, connection=None):
-    """Yield bounded pages of unique keys for documents where exists(field) is false."""
+    """Yield bounded pages of unique keys for documents where indexed field presence is absent."""
     if page_size < 1:
         raise ValueError('page_size must be positive')
     key = get_json(collection_url, 'schema/uniquekey', connection=connection, wt='json').get('uniqueKey')
     if not isinstance(key, str) or not key:
         raise SolrError('Solr schema has no unique key; cannot export IDs')
     cursor = '*'
+    function = False
     while True:
-        page = get_json(collection_url, 'select', connection=connection, q='*:*', fq='{!frange l=0 u=0}exists($dq_field)', dq_field=field_name, fl=key, sort='{0} asc'.format(
+        page, function = _presence_json(collection_url, field_name, connection=connection, missing=True,
+                                        function=function, q='*:*', fl=key, sort='{0} asc'.format(
             key), rows=page_size, cursorMark=cursor, wt='json', omitHeader='false', **{'shards.tolerant': 'false'})
         header = page.get('responseHeader', {})
         if header.get('partialResults') not in (None, False, 'false'):

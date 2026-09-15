@@ -1,0 +1,88 @@
+{
+  "add-field": [
+    {
+      "name": "first_name_t",
+      "type": "text_general",
+      "stored": true,
+      "indexed": true,
+      "multiValued": false
+    },
+    {
+      "name": "last_name_t",
+      "type": "text_general",
+      "stored": true,
+      "indexed": true,
+      "multiValued": false
+    },
+    {
+      "name": "street_address_t",
+      "type": "text_general",
+      "stored": true,
+      "indexed": true,
+      "multiValued": false
+    },
+    {
+      "name": "city_t",
+      "type": "text_general",
+      "stored": true,
+      "indexed": true,
+      "multiValued": false
+    },
+    {
+      "name": "state_t",
+      "type": "text_general",
+      "stored": true,
+      "indexed": true,
+      "multiValued": false
+    },
+    {
+      "name": "postal_code_t",
+      "type": "text_general",
+      "stored": true,
+      "indexed": true,
+      "multiValued": false
+    },
+    {
+      "name": "country_t",
+      "type": "text_general",
+      "stored": true,
+      "indexed": true,
+      "multiValued": false
+    },
+    {
+      "name": "email_t",
+      "type": "text_general",
+      "stored": true,
+      "indexed": true,
+      "multiValued": false
+    },
+    {
+      "name": "phone_t",
+      "type": "text_general",
+      "stored": true,
+      "indexed": true,
+      "multiValued": false
+    },
+    {
+      "name": "ssn_t",
+      "type": "text_general",
+      "stored": true,
+      "indexed": true,
+      "multiValued": false
+    },
+    {
+      "name": "event_date_dt",
+      "type": "pdate",
+      "stored": true,
+      "indexed": true,
+      "multiValued": false
+    },
+    {
+      "name": "notes_t",
+      "type": "text_general",
+      "stored": true,
+      "indexed": true,
+      "multiValued": false
+    }
+  ]
+}

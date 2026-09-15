@@ -17,32 +17,28 @@ def _ask(label, default=None, secret=False):
         return default if value == '' else (None if value == '-' else value)
 
 
-def _filters(label, defaults):
-    print('{0}: {1}'.format(label, repr(defaults) if defaults else '(none)'))
-    print('Enter keeps this list; - clears it; otherwise enter one glob per line, then an empty line.')
-    first = input('First pattern: ').strip()
-    if not first:
-        return defaults
-    if first == '-':
-        return []
-    patterns = [first]
-    while True:
-        value = input('Next pattern (Enter finishes): ').strip()
-        if not value:
-            return patterns
-        patterns.append(value)
-
-
 def run_wizard(options):
     # Like --write_config, use only the destination file, not environment/parent defaults.
-    from dq.cli import _resolve_field_filters
+    from dq.settings import _resolve_field_filters, resolve_rows, resolve_progress_every, resolve_skip_null_values
     path = absolute_path(options.config or 'dq.ini')
-    config = load_config(path) if os.path.isfile(path) else DqConfig()
-    print('Configuration wizard: {0}'.format(path))
+    exists = os.path.isfile(path)
+    config = load_config(path) if exists else DqConfig()
+    rows = resolve_rows(options, config)
+    print('Configuration Wizard')
+    print('--------------------')
+    print('This wizard will {0}: {1}'.format('update' if exists else 'create', path))
+    if options.config:
+        print('This file was selected with --config.')
+    else:
+        print('The default is dq.ini in your current directory.')
+    print('To choose another file, press Ctrl-C and run:')
+    print('  bin/dq --config_wizard --config FILE')
+    print()
     print('Enter keeps the displayed default; - clears an optional value. Ctrl-C cancels.')
-    print('Defaults come from command-line options and this destination file only.')
+    print('Defaults come from command-line options, this destination file, then built-in suggestions.')
     url = options.main_url or config.main_url or 'http://localhost:8983/solr'
-    collection = options.collection if options.collection is not None else config.collection
+    collection = options.collection if options.collection is not None else (config.collection or 'dq-demo')
+    print('For ES/OpenSearch, enter e.g. http://localhost:9200 (default port 9200).')
     while True:
         url = _ask('main_url', url)
         try:
@@ -62,34 +58,39 @@ def run_wizard(options):
             print('Invalid target: {0}'.format(error))
     values = connection_values(options, config)
     while True:
-        values['username'] = _ask('username (optional Basic authentication)', values['username'])
-        if values['username'] is None:
+        username_default = (values['username'] or '').strip() or None
+        username_label = ('username (Enter keeps saved value; - disables Basic authentication)'
+                          if username_default else
+                          'username (leave blank if not using Basic authentication)')
+        values['username'] = _ask(username_label, username_default)
+        if not values['username']:
+            values['username'] = None
             values['password'] = None
         else:
             values['password'] = _ask('password (stored as plaintext in INI)', values['password'], secret=True)
-        values['trust_certificate'] = _ask('trust_certificate (optional PEM path)', values['trust_certificate'])
-        certificate = values['trust_certificate']
-        if certificate:
-            certificate = os.path.expanduser(certificate)
-            if not os.path.isabs(certificate):
-                certificate = os.path.join(os.path.dirname(path), certificate)
-            values['trust_certificate'] = absolute_path(certificate)
         try:
-            Connection(**values)
+            Connection(username=values['username'], password=values['password'])
             break
         except ConfigError as error:
             print('Invalid connection settings: {0}'.format(error))
+    # Advanced certificate settings come only from CLI/INI; never prompt for them.
+    if values['trust_certificate']:
+        Connection(**values)
+    # Keep advanced settings, accepting explicit CLI overrides without prompting.
     _resolve_field_filters(options, config)
-    include = _filters('include_fields (simple globs, not regex)', options.include_fields)
-    exclude = _filters('exclude_fields (simple globs, not regex)', options.exclude_fields)
+    include = options.include_fields if options.field_filter_sources['include_fields'] != 'built-in default' else None
+    exclude = options.exclude_fields if options.field_filter_sources['exclude_fields'] != 'built-in default' else None
     print('\nConfiguration to save: {0}'.format(path))
     print('Target: {0}'.format(target))
+    print('rows: {0}{1}'.format(rows, ' (no limit)' if rows == -1 else ' (source documents per scan)'))
     for name in ('username', 'password', 'trust_certificate'):
         value = values[name]
+        if name == 'trust_certificate' and not value:
+            continue
         print('{0}: {1}'.format(name, '[redacted]' if name == 'password' and value is not None else value or '(none)'))
-    print('include_fields: {0}\nexclude_fields: {1}'.format(repr(include), repr(exclude)))
-    if not include and not exclude:
-        print('Default field exclusion applies: _*_')
+    for name, value in (('include_fields', include), ('exclude_fields', exclude)):
+        if getattr(options, name) and options.field_filter_sources[name] == 'command line':
+            print('{0} (command line): {1}'.format(name, value))
     while True:
         answer = input('Save configuration? [Y/n]: ').strip().lower()
         if answer in ('n', 'no'):
@@ -99,6 +100,7 @@ def run_wizard(options):
             break
         print('Please enter yes or no.')
     write_config(path, url, collection, include_fields=include, exclude_fields=exclude,
-                 preserve_optional=False, **values)
+                 preserve_optional=False,
+                 reports_dir=getattr(options, 'reports_dir', None) if getattr(options, 'reports_dir', None) is not None else config.reports_dir, rows=rows, progress_every=resolve_progress_every(options, config), skip_null_values=resolve_skip_null_values(options, config), **values)
     print('Wrote configuration: {0}'.format(path))
     return 0

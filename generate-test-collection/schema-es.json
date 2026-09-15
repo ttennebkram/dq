@@ -1,0 +1,50 @@
+{
+  "settings": {
+    "number_of_shards": 1,
+    "number_of_replicas": 0
+  },
+  "mappings": {
+    "dynamic": "strict",
+    "properties": {
+      "first_name_t": {
+        "type": "text"
+      },
+      "last_name_t": {
+        "type": "text"
+      },
+      "street_address_t": {
+        "type": "text"
+      },
+      "city_t": {
+        "type": "text"
+      },
+      "state_t": {
+        "type": "text"
+      },
+      "postal_code_t": {
+        "type": "text"
+      },
+      "country_t": {
+        "type": "text"
+      },
+      "email_t": {
+        "type": "text"
+      },
+      "phone_t": {
+        "type": "text"
+      },
+      "ssn_t": {
+        "type": "text"
+      },
+      "event_date_dt": {
+        "type": "date"
+      },
+      "notes_t": {
+        "type": "text"
+      },
+      "id": {
+        "type": "keyword"
+      }
+    }
+  }
+}

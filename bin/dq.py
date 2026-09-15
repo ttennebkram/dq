@@ -1,0 +1,15 @@
+#!/usr/bin/env python3
+"""Run DQ directly from this checkout, without installing the package."""
+
+import sys
+import os
+
+if sys.version_info < (3, 4, 10):
+    sys.exit("dq: Python 3.4.10 or newer is required")
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "src"))
+
+from dq.main import main
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -9,15 +9,65 @@
 # default-file values, but are ignored when an explicit --config FILE is used.
 
 [DEFAULT]
+# Markdown reports, CSV exports, and supporting files. Relative to this INI file.
+# Rule exports use <FIELD_NAME>_<RULE_NAME>.csv. Special reports choose their Markdown layout.
+# Quick checkup writes one summary, quick_checkup.md, without CSVs.
+# Full checkup adds field details and FIELD_NAME_full_checkup.csv findings.
+# Field names retain A-Z, a-z, 0-9, dash and underscore; other characters become _.
+# Final report output separates Main Report File(s) from Other Created Files.
+# All generated paths are shown relative to the working directory.
+# Missing directories are created automatically, with a creation message.
+# CLI --reports_dir / --reports-dir overrides this; CLI paths are relative to cwd.
+reports_dir = reports
+
+# Maximum documents to check per scan.
+# Each field exports one CSV record per failing value. If multiple rules apply
+# to one value, the first failure in the rule chain is reported.
+# Single-valued: at most one per document; multivalued: one per failing value.
+# -1 means no limit (default); 0 skips document scans; positive integers cap them.
+# Presence counts and --list_fields remain collection-wide.
+# CLI --rows N and --size N are synonyms and override this value.
+# Single underscores between digits are allowed: 1_000 means 1000, even on Python 3.4.
+# Applies to CLI and INI; saved values use plain integers.
+rows = -1
+# INI size is also a synonym; use it instead of rows, not with a conflicting value.
+# size = 1000
+# --write_config and the wizard save the canonical rows name.
+
+
+# Progress: announce scanned fields and print one flushed dot per N source documents.
+# Counts documents, not findings or multivalued items; does not change page size.
+# 0 disables dots; field announcements and the final scan summary remain.
+# The summary includes documents checked, elapsed seconds, and average records/second.
+# CSV completion separately counts offending records exported (Number of CSV records, not counting header row).
+# Regex processors using results=succeeded label their exports as passing records.
+# CLI --progress_every / --progress-every overrides this; accepts 1_000 notation.
+# Progress goes to stdout; report and CSV data remain in files.
+# Completed actions append scan timings to reports_dir/processing-stats.jsonl.
+# Quick checkup has no scan timing. These measurements are for future estimates.
+# Preserved by the wizard without adding a prompt.
+progress_every = 1000
+
+# Omit null/missing findings from standard_text and shared regex/checkup text checks.
+# Empty strings, all-whitespace strings, and surrounding whitespace still fail.
+# Explicit missing_fields checks and presence counts are unchanged.
+# CLI --skip_null_values / --skip-null-values means true; append false to override.
+# Saved by --write_config and preserved by the wizard without another prompt.
+skip_null_values = false
 # Base URL for Solr, Elasticsearch, or OpenSearch.
+# For ES/OpenSearch, use e.g. http://localhost:9200 (default port 9200).
 # It may include the collection or index name.
 main_url = http://localhost:8983/solr
 
 # Collection or index to inspect. Omit this setting when main_url already
-# includes it, for example: http://localhost:8983/solr/my-files
-collection = my-files
+# includes it, for example: http://localhost:8983/solr/dq-demo
+# dq-demo is the test-data collection and the wizard suggestion when unset.
+# CLI/saved collection values and a collection in main_url take precedence.
+collection = dq-demo
 
 # Optional field filters: simple glob patterns, not regex, one per line.
+# Configure these after initial setup. The wizard does not ask for patterns;
+# it preserves saved filters and accepts explicit CLI overrides.
 # Indent continuation lines; do not quote patterns or separate them with commas.
 # include_fields = file_*
 #     content_*
@@ -27,22 +77,56 @@ collection = my-files
 # If both effective lists are empty, DQ uses its default exclusion of _*_.
 
 # Optional HTTP Basic authentication. Use HTTPS for encrypted credentials.
+# The wizard defaults to a blank username when unset and skips the password.
+# To disable saved authentication in the wizard, enter - at the username prompt.
 # Values are plaintext; protect your dq.ini with chmod 600 and keep it out of Git.
 # username = mark
 # password = replace-with-your-password
 
-# Optional PEM private-CA or self-signed server certificate (no private key).
+# HTTPS does NOT require trust_certificate. Use https:// in main_url;
+# Python verifies the server using its default trusted certificates.
+# Leave this commented out for normal HTTPS. Set it only for a self-signed
+# certificate or private CA that Python does not already trust.
+# Not prompted by the wizard; existing/CLI settings are preserved. No private key.
 # Relative paths are resolved against this INI file's directory.
 # trust_certificate = certificates/solr-ca.pem
 
+# User processor INI definitions belong in processors/ beside this INI file.
+# When no INI file is loaded, DQ looks for processors/ in the current directory.
+# Pattern paths in processor INI files resolve against those processor INI files.
+# Duplicate processor names are errors; no user Python code is loaded.
+
 # Command-line-only options (do not add these as INI keys):
-# Choose one action:
+# Choose one rule/action pair, a special report, or a utility command:
+#   --rule / --rules NAME [NAME ...] --action csv
+#     One or more rules: missing_fields, empty_strings, whitespace_only,
+#     standard_text, code_points, us_phone, email, ssn,
+#     customer_code_example, or a user rule.
+#     Rules are base or composite. standard_text is a predefined composite;
+#     multiple names supplied to --rules form a composite dynamically.
+#     Values must pass every rule; the first failure in command-line order is exported.
+#     Writes <FIELD_NAME>_<RULE_NAME>.csv per field, including header-only files.
+#     Every rule writes id,reason,value.
 #   --report / --reports NAME [NAME ...]
-#     empty_fields implemented; term_stats, code_points, date_checker planned.
-#   --ids / -id empty_fields
+#     Exact synonyms; both accept one or more report names and imply report action.
+#     Special reports: quick_checkup and full_checkup.
+#     report is implied; ordinary rules have no generic Markdown export.
+#   --list_reports
+#     List reports, implementation status, and descriptions on stdout.
+#   --list_rules
+#     List rules, Base/Composite type, and descriptions on stdout.
+#     quick_checkup summarizes document counts per field in one Markdown report.
+#     Commands for additional checks precede the Full Report Workload Estimate.
+#     full_checkup adds details and CSV findings from the same scan.
+#     Presence-only fields have counts but no CSV; their IDs were not fetched.
+#     Post-MVP TODO: term_stats indexed-term analysis and date_checker graphs.
+#   --action csv / report
+#     Requires --rule (csv) or --report (report). Live updates are planned only.
+# Rule, report, and action selection is CLI-only; do not save it as INI keys.
 #   --list_fields / --list-fields
-#   --config_wizard / --config-wizard
-#     Interactive setup; writes ./dq.ini or --config FILE, which may be new.
+#   --config_wizard / --setup_wizard
+#     Prompts only for URL, collection, optional login, and save confirmation.
+#     Writes ./dq.ini or --config FILE, which may be new.
 #     Defaults: CLI then destination file; ignores environment/other config files.
 #     Enter keeps a value; - clears optional values; asks before saving.
 #   --write_config / --write-config
@@ -58,6 +142,38 @@ collection = my-files
 #   --trust_certificate / --trust-certificate FILE
 
 # CLI overrides for the saved field filters above (repeatable):
-#   --include_fields / --include_field / --include-fields / --include-field PATTERN
-#   --exclude_fields / --exclude_field / --exclude-fields / --exclude-field PATTERN
+#   --include_fields / --include_field / --include-fields / --include-field PATTERN [PATTERN ...]
+#   --exclude_fields / --exclude_field / --exclude-fields / --exclude-field PATTERN [PATTERN ...]
+#   Supply several patterns after one option or repeat the option.
 #   Without either filter, field names matching _*_ are excluded.
+
+# standard_text groups null, empty_strings, whitespace_only, surrounding whitespace,
+# then code_points.
+# code_points remains available independently; regex processors include standard_text.
+# Native date fields get presence checks only. Date analysis/graphs are deferred.
+# Automatic standard_text checks skip the schema unique key.
+# standard_text applies only to schema text/string fields, even with overrides.
+# Vector fields only support presence checks; stored arrays are not scanned.
+# Optional automatic-checkup overrides. Each value REPLACES inferred checks.
+# Supported: missing_fields, empty_values, standard_text, code_points, email, us_phone, ssn; or none.
+# Field patterns are case-sensitive globs; overlapping matches are errors.
+# [checkup]
+# contact_s = missing_fields, standard_text, email
+# ignored_* = none
+
+
+# Test collection submission only; main DQ reports currently target Solr.
+# submit-to-es.py supports BOTH Elasticsearch and OpenSearch with this section.
+# CLI-only loader actions/settings: --submit, --recreate_index, --index,
+# --data_files_dir, --config. CLI connection settings override the section.
+# Legacy [opensearch] is read only if [elasticsearch] is absent; its URL default
+# is localhost:9201. Otherwise the built-in URL default is localhost:9200.
+[elasticsearch]
+main_url = http://localhost:9200
+# For our local OpenSearch instance, replace the URL above with:
+# main_url = http://localhost:9201
+# Use separate INI files with --config if the two servers need different credentials.
+# username = example
+# password = example
+# Normal HTTPS needs no certificate file; only set this for untrusted self-signed/private-CA certificates.
+# trust_certificate = certificates/es-or-opensearch.pem

@@ -50,7 +50,7 @@ as a general-purpose replacement Python installation.
 ## Verification
 
 - Regression tests run on Python 3.4.10 and 3.12.5.
-- Live `empty_fields` report against `my-files`: 2,011,748 documents.
+- Live `quick_checkup` report against `my-files`: 2,011,748 documents.
 - Cursor export of missing `file_name_s` IDs: 1,005,874 IDs.
 - Verified HTTPS to python.org.
 - Local HTTPS test: a trusted certificate and correct Basic credentials succeed;

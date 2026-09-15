@@ -5,9 +5,11 @@ import io
 import os
 import unittest
 import sys
+import tempfile
 from unittest.mock import patch
 
-from dq.cli import build_parser, main
+from dq.arguments import build_parser, resolve_selection
+from dq.main import main
 from dq.config import DqConfig
 from dq.solr import SolrError, missing_id_pages
 
@@ -54,7 +56,7 @@ class CursorTests(unittest.TestCase):
                 self.assertEqual(call[1]["fl"], "key_s")
                 self.assertEqual(call[1]["sort"], "key_s asc")
                 self.assertEqual(call[1]["rows"], 2)
-                self.assertEqual(call[1]["fq"], "{!frange l=0 u=0}exists($dq_field)")
+                self.assertEqual(call[1]["fq"], "{!lucene}(*:* AND -title_s:*)")
                 self.assertEqual(call[1]["dq_field"], "title_s")
                 self.assertNotIn("start", call[1])
 
@@ -82,46 +84,73 @@ class CursorTests(unittest.TestCase):
 
 class CliTests(unittest.TestCase):
     def test_repeated_report_lists_are_flattened(self):
-        with patch("dq.cli.load_config", return_value=DqConfig()), \
-             patch("dq.cli.collection_url", return_value="http://solr/c"), \
-             patch("dq.cli.write_empty_fields_report") as write, \
+        with patch("dq.actions.load_config", return_value=DqConfig()), \
+             patch("dq.actions.collection_url", return_value="http://solr/c"), \
+             patch("dq.reports.quick_checkup.write_report") as write, \
              redirect_stdout(io.StringIO()):
-            self.assertEqual(main(["--report", "empty_fields", "empty_fields",
-                                   "--reports", "empty_fields"]), 0)
-        self.assertEqual(os.path.basename(write.call_args[0][1]), "report_empty_fields.md")
+            self.assertEqual(main(["--report", "quick_checkup", "quick_checkup",
+                                   "--reports", "quick_checkup"]), 0)
+        self.assertEqual(os.path.basename(write.call_args[0][1]), "quick_checkup.md")
         details = write.call_args[1]["option_details"]
-        self.assertEqual(details[0][1], "empty_fields, empty_fields, empty_fields")
+        self.assertEqual(details[0][1], "quick_checkup")
 
-    def test_alias(self):
-        for flag in ("--ids", "-id"):
-            self.assertEqual(build_parser().parse_args([flag, "empty_fields"]).ids, "empty_fields")
+    def test_rule_action_replaces_old_flags_and_csv_alias(self):
+        options = build_parser().parse_args(['--rule', 'missing_fields', '--action', 'csv'])
+        resolve_selection(options, build_parser())
+        self.assertEqual(options.rule, ['missing_fields'])
+        self.assertEqual(options.action, 'csv')
+        for flag in ('--ids', '-id', '--csv'):
+            with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                build_parser().parse_args([flag, 'missing_fields'])
 
     def test_action_conflict_is_rejected_before_network(self):
-        for other in (["--report", "empty_fields"], ["--list_fields"], ["--write_config"]):
-            with self.subTest(other=other), patch("dq.cli.load_config") as load, \
+        for other in (["--report", "quick_checkup"], ["--list_fields"], ["--write_config"]):
+            with self.subTest(other=other), patch("dq.actions.load_config") as load, \
                  redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
-                main(["--ids", "empty_fields"] + other)
+                main(["--rule", "missing_fields", "--action", "csv"] + other)
             self.assertEqual(error.exception.code, 2)
             self.assertFalse(load.called)
 
     def run_export(self, fields, pages):
         stdout, stderr = io.StringIO(), io.StringIO()
-        with patch("dq.cli.load_config", return_value=DqConfig()), \
-             patch("dq.cli.collection_url", return_value="http://solr/c"), \
-             patch("dq.cli.list_fields", return_value=fields), \
-             patch("dq.cli.missing_id_pages", return_value=iter(pages)) as fetch, \
-             redirect_stdout(stdout), redirect_stderr(stderr):
-            try:
-                status = main(["--ids", "empty_fields"])
-            except SystemExit as error:
-                status = error.code
-        return status, stdout.getvalue(), stderr.getvalue(), fetch
+        with tempfile.TemporaryDirectory() as directory:
+            with patch("dq.actions.load_config", return_value=DqConfig(reports_dir=directory)), \
+                 patch("dq.actions.collection_url", return_value="http://solr/c"), \
+                 patch("dq.processors.missing_fields.processor.list_fields", return_value=fields), \
+                 patch("dq.stored.values", return_value=iter((v, "title_s", False) for batch in pages for v in batch)) as fetch, \
+                 redirect_stdout(stdout), redirect_stderr(stderr):
+                try:
+                    status = main(["--rule", "missing_fields", "--action", "csv", "--rows", "100"])
+                except SystemExit as error:
+                    status = error.code
+            path = os.path.join(directory, 'title_s_missing_fields.csv')
+            contents = ''
+            if os.path.isfile(path):
+                with open(path, encoding='utf-8', newline='') as stream:
+                    contents = stream.read()
+        self.assertNotIn('id,reason,value', stdout.getvalue())
+        return status, contents, stderr.getvalue(), fetch
 
-    def test_ids_only_on_stdout(self):
+    def test_csv_findings_go_to_named_file(self):
         status, out, err, _ = self.run_export([{"name": "title_s", "stored": True}], [["a", "b"], ["c"]])
         self.assertEqual(status, 0)
-        self.assertEqual(out, "a\nb\nc\n")
-        self.assertIn("3 IDs exported", err)
+        self.assertEqual(out, "id,reason,value\r\na,missing_fields: missing or null,\r\nb,missing_fields: missing or null,\r\nc,missing_fields: missing or null,\r\n")
+        self.assertIn("Offending records exported: 3", err)
+
+    def test_csv_header_without_matches(self):
+        status, out, err, _ = self.run_export([{'name': 'title_s', 'stored': True}], [])
+        self.assertEqual(status, 0)
+        self.assertEqual(out, 'id,reason,value\r\n')
+        self.assertIn('Offending records exported: 0', err)
+
+    def test_csv_quotes_and_unicode_roundtrip(self):
+        import csv
+        values = ['with,comma', 'a"quote', 'café', '00123']
+        status, out, _, _ = self.run_export([{'name': 'title_s', 'stored': True}], [values])
+        self.assertEqual(status, 0)
+        self.assertEqual(list(csv.reader(io.StringIO(out))), [['id', 'reason', 'value']] + [[v, 'missing_fields: missing or null', ''] for v in values])
+        self.assertIn('"with,comma"', out)
+        self.assertIn('"a""quote"', out)
 
     def test_ambiguous_empty_or_nonstored_selection(self):
         for fields in [[], [{"name": "a"}, {"name": "b"}], [{"name": "a", "stored": False}]]:

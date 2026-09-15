@@ -4,7 +4,7 @@ import os
 import tempfile
 import unittest
 from unittest.mock import patch
-from dq.cli import main
+from dq.main import main
 from dq.config import load_config, write_config
 
 
@@ -35,8 +35,8 @@ class SavedFilterTests(unittest.TestCase):
     def test_report_uses_saved_filters_and_reports_their_source(self):
         with tempfile.TemporaryDirectory() as directory:
             path = self.config_file(directory)
-            with patch('dq.cli.write_empty_fields_report') as report, patch('sys.stdout', io.StringIO()):
-                self.assertEqual(main(['--config', path, '--report', 'empty_fields']), 0)
+            with patch('dq.reports.quick_checkup.write_report') as report, patch('sys.stdout', io.StringIO()):
+                self.assertEqual(main(['--config', path, '--report', 'quick_checkup']), 0)
             self.assertEqual(report.call_args[1]['include'], ['file_*', 'title[ab,]_s'])
             self.assertEqual(report.call_args[1]['exclude'], ['*_vector'])
             details = dict((name, (value, source)) for name, value, source in report.call_args[1]['option_details'])
@@ -45,14 +45,23 @@ class SavedFilterTests(unittest.TestCase):
     def test_cli_overrides_each_list_independently_and_can_clear(self):
         with tempfile.TemporaryDirectory() as directory:
             path = self.config_file(directory)
-            with patch('dq.cli.print_fields') as output:
+            with patch('dq.main.print_fields') as output:
                 main(['--config', path, '--list_fields', '--include_field', 'name_s'])
             self.assertEqual(output.call_args[1]['include'], ['name_s'])
             self.assertEqual(output.call_args[1]['exclude'], ['*_vector'])
-            with patch('dq.cli.print_fields') as output:
+            with patch('dq.main.print_fields') as output:
                 main(['--config', path, '--list_fields', '--exclude_fields', ''])
             self.assertEqual(output.call_args[1]['exclude'], [])
             self.assertEqual(output.call_args[1]['include'], ['file_*', 'title[ab,]_s'])
+
+    def test_cli_accepts_multiple_patterns_after_one_option(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = self.config_file(directory)
+            with patch('dq.main.print_fields') as output:
+                main(['--config', path, '--list_fields', '--include_field',
+                      'abs_path_t', 'mime_type_t'])
+            self.assertEqual(output.call_args[1]['include'],
+                             ['abs_path_t', 'mime_type_t'])
 
     def test_write_config_persists_filters_and_ids_use_them(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -61,9 +70,11 @@ class SavedFilterTests(unittest.TestCase):
                 main(['--config', path, '--write_config', '--include_field', 'name_s'])
             self.assertEqual(load_config(path).include_fields, ['name_s'])
             fields = [{'name': 'name_s', 'stored': True}, {'name': 'other_s', 'stored': True}]
-            with patch('dq.cli.list_fields', return_value=fields), \
-                 patch('dq.cli.missing_id_pages', return_value=iter([['one']])) as pages, \
+            with patch('dq.processors.missing_fields.processor.list_fields', return_value=fields), \
+                 patch('dq.stored.values', return_value=iter([('one', 'name_s', False)])) as pages, \
                  patch('sys.stdout', io.StringIO()) as stdout, patch('sys.stderr', io.StringIO()):
-                main(['--config', path, '--ids', 'empty_fields'])
-                self.assertEqual(stdout.getvalue(), 'one\n')
-                self.assertEqual(pages.call_args[0][1], 'name_s')
+                main(['--config', path, '--rule', 'missing_fields', '--action', 'csv', '--rows', '1', '--reports_dir', directory])
+                self.assertIn('name_s_missing_fields.csv', stdout.getvalue())
+                with open(os.path.join(directory, 'name_s_missing_fields.csv'), newline='') as stream:
+                    self.assertEqual(stream.read(), 'id,reason,value\r\none,missing_fields: missing or null,\r\n')
+                self.assertEqual(pages.call_args[0][1][0]['name'], 'name_s')
