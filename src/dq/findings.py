@@ -23,10 +23,10 @@ class CsvExport:
 
 def finding_field(row, names):
     """Resolve a row's field without inspecting reasons or guessing from globs."""
-    from dq.processors import ReportError
+    from dq.errors import ReportError
     name = getattr(row, 'field', None)
     if name is None and len(names) == 1:
         return next(iter(names))
     if name not in names:
-        raise ReportError('finding has no selected field; the processor must attach its original field name')
+        raise ReportError('finding has no selected field; the rule must attach its original field name')
     return name

@@ -6,8 +6,7 @@ Configuration
 Run `bin/dq --config_wizard` or `bin/dq --setup_wizard` to walk through the
 standard settings: `main_url`, collection/index, optional Basic authentication username
 and password. Field filters are configured separately in the INI file or on the
-command line; the wizard does not ask for them. Custom regex processors are
-discovered from `processors/` beside that INI file.
+command line; the wizard does not ask for them.
 The Configuration Wizard header shows the full destination path and whether
 the file will be created or updated. It defaults to `dq.ini` in the current
 directory; cancel with Ctrl-C and use `--config FILE` to choose another file:
@@ -212,7 +211,7 @@ exclude_fields = *_vector
 
 Patterns are not regex. Do not quote INI patterns or separate them with commas;
 spaces and commas within a pattern are literal. Saved filters apply to reports,
-`--list_fields`, and `--rule NAME --action csv`. Each selected stored field gets a separate report or CSV file.
+`--list_fields`, and `--rule NAME`. Each selected stored field gets a separate report or CSV file.
 
 Command-line `--include_fields` replaces the saved include list; `--exclude_fields`
 replaces the saved exclude list independently. Supply multiple patterns after
@@ -255,6 +254,32 @@ remain collection-wide, including those in quick and full checkups and field
 listing. The limit applies to stored-value findings; the quick
 report uses it when estimating the full report's workload.
 
+## Checkup Reports
+
+`quick_checkup` writes one Markdown report containing field-presence counts,
+suggested rules, focused follow-up commands, and an estimate of the full-checkup
+workload. It does not fetch stored values or create CSV files. **Presence check
+only** means a field receives document counts; **Disabled** means its checks were
+turned off in the configuration.
+
+`full_checkup` scans stored values once across all selected fields. It writes an
+overview, a detail report for each field, and
+`<FIELD_NAME>_full_checkup.csv` for fields with stored-value checks. Detail reports
+retain up to 100 examples; CSV files retain all findings with complete IDs and
+values. A field with no findings gets a header-only CSV. Presence-only fields do
+not get CSV files. Keep these supporting files with the overview when sharing it.
+
+Missing counts use separate Solr field-existence queries and remain
+collection-wide when `--rows` limits the value scan. Multivalued fields are
+expanded; counts represent finding rows rather than distinct documents. DQ
+reports only the first failed base rule for each value. Concurrent index changes
+can affect results because a checkup is not a snapshot.
+
+The quick report's workload estimate covers all selected fields together. Actual
+full-checkup time varies with field sizes, selected fields, server load, and
+network speed. Use `--include_fields` to focus the scan and `--rows` / `--size`
+to limit source documents during testing.
+
 ## Scan Progress
 
 `progress_every = 1000` prints one immediately flushed dot for every 1,000
@@ -265,9 +290,8 @@ and average records/second. Timing includes server waits and value checks; the
 rate counts source documents, not findings or multivalued items. The scan total
 is labeled `Documents checked`; CSV completion separately labels `Offending records exported` (data rows, excluding the header). Multi-field runs show a
 count for each field and an overall total. One source document may
-produce zero, one, or multiple CSV rows. Regex processors with `results = succeeded`
-use the label `Passing records exported` instead. No environment
-variable applies. The wizard preserves this setting without a prompt, and
+produce zero, one, or multiple CSV rows. No environment variable applies. The
+wizard preserves this setting without a prompt, and
 `--write_config` saves it, commenting out a changed previous value.
 
 Progress goes to stdout for reports and CSV exports. Source documents are counted
@@ -288,7 +312,7 @@ override. This setting affects Markdown reports, CSV exports, and supporting fil
 Rule exports use `<FIELD_NAME>_<RULE_NAME>.csv`. Special reports choose their own
 Markdown layout; quick checkup writes one summary without CSVs, while full
 checkup includes per-field CSV findings from its shared stored-value scan.
-For example, `--rule email --action csv --include_field email_t` writes `reports/email_t_email.csv`.
+For example, `--rule email_composite --include_field email_t` writes `reports/email_t_email_composite.csv`.
 Quick checkup writes one summary; full checkup links to field reports and CSVs.
 Final report output separates Main Report File(s) from Other Created Files.
 CSV runs use Files created. All paths are relative to the working directory.
@@ -299,8 +323,8 @@ Later runs replace files with the same name. Field listing still uses stdout.
 
 `skip_null_values = false` includes null/missing findings by default. Set it to
 `true`, or pass `--skip_null_values`, to omit only null findings from
-standard_text and shared regex/checkup text checks. Empty strings, whitespace,
-and other checks remain. Explicit missing_fields and presence counts are unchanged.
+composite and base rule chains. Empty strings, whitespace,
+and other checks remain. Explicit missing_fields_base and presence counts are unchanged.
 `--skip_null_values false` overrides a saved true setting. The wizard preserves
 this option without a prompt; --write_config saves it and comments out changed
 old values. Reports record the effective setting and its source.
@@ -308,7 +332,7 @@ old values. Reports record the effective setting and its source.
 
 ### Rules, Reports and Actions
 
-Use --rule NAME [NAME ...] --action csv for findings. --rules is a synonym.
+Use --rule NAME [NAME ...] for CSV findings; csv is the default rule action. --rules is a synonym.
 Rules run in order during one scan; every rule must pass and the first failure
 is exported. --report NAME
 selects special analysis and implies --action report, which may also be explicit.

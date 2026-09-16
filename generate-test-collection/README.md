@@ -171,15 +171,15 @@ values, not necessarily what Solr retains.
 ```bash
 ../bin/dq --main_url http://localhost:8983/solr/dq-demo --report quick_checkup
 ../bin/dq --main_url http://localhost:8983/solr/dq-demo --report full_checkup
-../bin/dq --main_url http://localhost:8983/solr/dq-demo --rule missing_fields --action csv --include_field email_t
-../bin/dq --main_url http://localhost:8983/solr/dq-demo --rule email --action csv --include_field email_t
+../bin/dq --main_url http://localhost:8983/solr/dq-demo --rule missing_fields_base --action csv --include_field email_t
+../bin/dq --main_url http://localhost:8983/solr/dq-demo --rule email_composite --action csv --include_field email_t
 ```
 
 The normal configured credentials still apply. Reports are written to `reports_dir` (default: `reports/` under the current
 working directory). A relative INI setting is resolved from the INI directory. CSV currently goes to stdout; use shell redirection to save it.
-For a 100-document fixture at 20% incorrect, each email/phone/SSN regex produces 20 failure rows:
+For a 100-document fixture at 20% incorrect, each email/phone/SSN composite produces 20 failure rows:
 four malformed, four all-whitespace, and twelve null/missing values after
-Solr removes the four submitted empty strings. Shared checks handle blank/null values before regex evaluation. Empty-fields CSV produces 16 rows per field: twelve
+Solr removes the four submitted empty strings. The standard text sub-composite handles blank/null values before regex evaluation. `missing_fields_base` CSV produces twelve
 null/missing and four all-whitespace strings with default blank removal. Solr does not
 preserve the distinction between an omitted field and an explicit null.
 

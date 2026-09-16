@@ -7,9 +7,9 @@ from dq.files import create_directory, field_output_paths, display_path, print_g
 from dq.csv_files import FieldCsvFiles
 from dq.progress import ScanProgress
 from dq.stats import FILENAME as STATS_FILENAME, save_scan_stats
-from dq.processors import ReportError
-from dq.processors.registry import load_handler
-from dq.settings import _resolve_field_filters, _report_option_details, processor_directory, reports_directory, resolve_rows, resolve_progress_every, resolve_skip_null_values
+from dq.errors import ReportError
+from dq.registry import load_handler
+from dq.settings import _resolve_field_filters, _report_option_details, reports_directory, resolve_rows, resolve_progress_every, resolve_skip_null_values
 from dq.solr import SolrError
 
 
@@ -23,8 +23,7 @@ def run_csv(options, parser):
         connection = make_connection(options, config)
         target = collection_url(config, main_url=options.main_url,
                                 collection=options.collection)
-        directory = processor_directory(config)
-        export = load_handler(options.rule, 'csv', directory) if directory else load_handler(options.rule, 'csv')
+        export = load_handler(options.rule, 'csv')
         if config.source:
             source = 'specified by --config' if options.config else 'default configuration'
             print('Configuration: {0} ({1})'.format(config.source, source), file=sys.stderr)
@@ -36,7 +35,7 @@ def run_csv(options, parser):
         if row_limit != -1:
             print('Maximum documents to check: {0:,}. Each field exports at most one CSV record per failing value. If multiple rules apply to one value, the first failure in the rule chain is reported.'.format(row_limit), file=sys.stderr)
         if not hasattr(prepared, 'fields'):
-            raise ReportError('CSV processor must return field metadata using CsvExport')
+            raise ReportError('CSV rule must return field metadata using CsvExport')
         header, pages = prepared
         destination = reports_directory(options, config)
         paths = field_output_paths(destination, rule_name, prepared.fields, 'csv')
@@ -45,8 +44,7 @@ def run_csv(options, parser):
         output = FieldCsvFiles(paths, header)
         for batch in pages:
             output.write_page(batch)
-        result_label = ('Passing records exported' if getattr(export, 'csv_results', 'failed') == 'succeeded'
-                        else 'Offending records exported')
+        result_label = 'Offending records exported'
         if len(paths) > 1:
             print('\n{0} by field:'.format(result_label), file=sys.stderr)
             for field in paths:
@@ -88,8 +86,7 @@ def run_reports(options, parser):
         for name in options.report:
             if name not in names:
                 names.append(name)
-        directory = processor_directory(config)
-        handlers = [(name, load_handler(name, 'report', directory) if directory else load_handler(name, 'report')) for name in names]
+        handlers = [(name, load_handler(name, 'report')) for name in names]
         destination = reports_directory(options, config)
         if create_directory(destination):
             print('Created reports directory: {0}'.format(display_path(destination)))

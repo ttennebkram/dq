@@ -40,7 +40,6 @@ rows = -1
 # 0 disables dots; field announcements and the final scan summary remain.
 # The summary includes documents checked, elapsed seconds, and average records/second.
 # CSV completion separately counts offending records exported (Number of CSV records, not counting header row).
-# Regex processors using results=succeeded label their exports as passing records.
 # CLI --progress_every / --progress-every overrides this; accepts 1_000 notation.
 # Progress goes to stdout; report and CSV data remain in files.
 # Completed actions append scan timings to reports_dir/processing-stats.jsonl.
@@ -48,9 +47,9 @@ rows = -1
 # Preserved by the wizard without adding a prompt.
 progress_every = 1000
 
-# Omit null/missing findings from standard_text and shared regex/checkup text checks.
+# Omit null/missing records from stored-value rule chains.
 # Empty strings, all-whitespace strings, and surrounding whitespace still fail.
-# Explicit missing_fields checks and presence counts are unchanged.
+# Direct missing_fields_base exports and presence counts are unchanged.
 # CLI --skip_null_values / --skip-null-values means true; append false to override.
 # Saved by --write_config and preserved by the wizard without another prompt.
 skip_null_values = false
@@ -91,19 +90,15 @@ collection = dq-demo
 # Relative paths are resolved against this INI file's directory.
 # trust_certificate = certificates/solr-ca.pem
 
-# User processor INI definitions belong in processors/ beside this INI file.
-# When no INI file is loaded, DQ looks for processors/ in the current directory.
-# Pattern paths in processor INI files resolve against those processor INI files.
-# Duplicate processor names are errors; no user Python code is loaded.
-
 # Command-line-only options (do not add these as INI keys):
-# Choose one rule/action pair, a special report, or a utility command:
-#   --rule / --rules NAME [NAME ...] --action csv
-#     One or more rules: missing_fields, empty_strings, whitespace_only,
-#     standard_text, code_points, us_phone, email, ssn,
-#     customer_code_example, or a user rule.
-#     Rules are base or composite. standard_text is a predefined composite;
-#     multiple names supplied to --rules form a composite dynamically.
+# Choose one rule, a special report, or a utility command:
+#   --rule / --rules NAME [NAME ...]
+#     One or more rules: missing_fields_base, empty_strings_base, whitespace_only_base,
+#     standard_text_composite, code_points_base, us_phone_base, us_phone_composite,
+#     email_base, email_composite, ssn_base, ssn_composite,
+#     part_number_example_base, part_number_example_composite, or another rule.
+#     Rules are base or composite. Composites may contain other composites;
+#     DQ flattens them to one de-duplicated, ordered base-rule list before scanning.
 #     Values must pass every rule; the first failure in command-line order is exported.
 #     Writes <FIELD_NAME>_<RULE_NAME>.csv per field, including header-only files.
 #     Every rule writes id,reason,value.
@@ -114,14 +109,14 @@ collection = dq-demo
 #   --list_reports
 #     List reports, implementation status, and descriptions on stdout.
 #   --list_rules
-#     List rules, Base/Composite type, and descriptions on stdout.
+#     List rules, Base and Predefined Composite type, and descriptions on stdout.
 #     quick_checkup summarizes document counts per field in one Markdown report.
 #     Commands for additional checks precede the Full Report Workload Estimate.
 #     full_checkup adds details and CSV findings from the same scan.
 #     Presence-only fields have counts but no CSV; their IDs were not fetched.
 #     Post-MVP TODO: term_stats indexed-term analysis and date_checker graphs.
 #   --action csv / report
-#     Requires --rule (csv) or --report (report). Live updates are planned only.
+#     Optional: rules default to csv; reports imply report. Do not combine rules and reports.
 # Rule, report, and action selection is CLI-only; do not save it as INI keys.
 #   --list_fields / --list-fields
 #   --config_wizard / --setup_wizard
@@ -147,21 +142,13 @@ collection = dq-demo
 #   Supply several patterns after one option or repeat the option.
 #   Without either filter, field names matching _*_ are excluded.
 
-# standard_text groups null, empty_strings, whitespace_only, surrounding whitespace,
-# then code_points.
-# code_points remains available independently; regex processors include standard_text.
+# standard_text_composite groups missing_fields_base, empty_strings_base, whitespace_only_base,
+# surrounding_whitespace_base, then code_points_base. Specialized composites append their
+# corresponding pure regex base rule.
 # Native date fields get presence checks only. Date analysis/graphs are deferred.
-# Automatic standard_text checks skip the schema unique key.
-# standard_text applies only to schema text/string fields, even with overrides.
+# Automatic standard_text_composite checks skip the schema unique key.
+# standard_text_composite applies only to schema text/string fields, even with overrides.
 # Vector fields only support presence checks; stored arrays are not scanned.
-# Optional automatic-checkup overrides. Each value REPLACES inferred checks.
-# Supported: missing_fields, empty_values, standard_text, code_points, email, us_phone, ssn; or none.
-# Field patterns are case-sensitive globs; overlapping matches are errors.
-# [checkup]
-# contact_s = missing_fields, standard_text, email
-# ignored_* = none
-
-
 # Test collection submission only; main DQ reports currently target Solr.
 # submit-to-es.py supports BOTH Elasticsearch and OpenSearch with this section.
 # CLI-only loader actions/settings: --submit, --recreate_index, --index,

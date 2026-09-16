@@ -1,1 +1,1 @@
-"""Markdown presentation and graph generation for processor results."""
+"""Markdown presentation and graph generation for rule results."""

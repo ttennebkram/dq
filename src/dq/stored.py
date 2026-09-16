@@ -2,7 +2,8 @@
 import json
 from dq.field_selection import select_fields
 from dq.limits import row_limit as validate_rows
-from dq.solr import get_json, list_fields, SolrError
+from dq.solr import get_json, SolrError
+from dq.search import is_solr_target, list_fields
 
 
 def fields(target, include=(), exclude=(), connection=None):
@@ -20,6 +21,14 @@ def values(target, selected, connection=None, page_size=1000, include_null=False
     presence_only returns exists(field) booleans without fetching stored arrays.
     """
     row_limit = validate_rows(row_limit)
+    if not is_solr_target(target):
+        from dq.elasticsearch import values as elasticsearch_values
+        for item in elasticsearch_values(
+                target, selected, connection=connection, page_size=page_size,
+                include_null=include_null, row_limit=row_limit,
+                presence_only=presence_only, scan_progress=scan_progress):
+            yield item
+        return
     if page_size < 1:
         raise ValueError('page_size must be positive')
     if row_limit == 0:

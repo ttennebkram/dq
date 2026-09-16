@@ -1,4 +1,4 @@
-"""Document scan limits shared by the CLI, configuration, and processors."""
+"""Document scan limits shared by the CLI, configuration, and rules."""
 import re
 
 

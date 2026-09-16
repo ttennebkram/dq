@@ -22,7 +22,12 @@ setup(
     python_requires='>=3.4.10',
     package_dir={'': 'src'},
     packages=find_packages('src'),
-    package_data={'dq.processors.regex': ['presets/*.ini', 'presets/*.regex']},
+    package_data={
+        'dq.rules.part_number_example_base': ['*.ini', '*.regex'],
+        'dq.rules.email_base': ['*.ini', '*.regex'],
+        'dq.rules.ssn_base': ['*.ini', '*.regex'],
+        'dq.rules.us_phone_base': ['*.ini', '*.regex'],
+    },
     install_requires=[],
     entry_points={'console_scripts': ['dq=dq.main:main']},
 )

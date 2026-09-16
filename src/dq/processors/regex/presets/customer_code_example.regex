@@ -1,2 +1,0 @@
-[a-z]{3}       # Three letters
-- [0-9]{6}     # Dash and six digits

@@ -10,7 +10,7 @@ from dq.arguments import build_parser
 from dq.config import ConfigError, DqConfig, load_config, write_config
 from dq.main import main
 from dq.settings import resolve_rows
-from dq.processors.registry import load_handler
+from dq.registry import load_handler
 from dq.reports.checkup import _full_workload
 
 
@@ -149,13 +149,13 @@ class ScanLimitTests(unittest.TestCase):
         responses = [{'uniqueKey': 'id'}, page([{'dq_key': 'a', 'dq_value0': [' ', '\t']}], 'one')]
         with tempfile.TemporaryDirectory() as directory, \
                 patch('dq.actions.load_config', return_value=DqConfig(main_url='http://solr/c', rows=100)), \
-                patch('dq.processors.whitespace_only.processor.stored.fields', return_value=[{'name': 'f', 'stored': True, 'type': 'string'}]), \
+                patch('dq.rules.whitespace_only_base.processor.stored.fields', return_value=[{'name': 'f', 'stored': True, 'type': 'string'}]), \
                 patch('dq.stored.get_json', side_effect=responses) as get, \
                 patch('sys.stdout', io.StringIO()) as out, patch('sys.stderr', io.StringIO()) as err:
-            self.assertEqual(main(['--rule', 'whitespace_only', '--action', 'csv', '--size', '1', '--reports_dir', directory]), 0)
-            with open(os.path.join(directory, 'f_whitespace_only.csv'), newline='') as stream:
+            self.assertEqual(main(['--rule', 'whitespace_only_base', '--action', 'csv', '--size', '1', '--reports_dir', directory]), 0)
+            with open(os.path.join(directory, 'f_whitespace_only_base.csv'), newline='') as stream:
                 records = list(csv.reader(stream))
-        self.assertIn('Field: f; rules: whitespace_only', out.getvalue())
+        self.assertIn('Field: f; rules: whitespace_only_base', out.getvalue())
         self.assertEqual(len(records), 3)
         self.assertEqual([row[0] for row in records[1:]], ['a', 'a'])
         self.assertEqual(get.call_args[1]['rows'], 1)
@@ -167,25 +167,25 @@ class ScanLimitTests(unittest.TestCase):
         field = {'name': 'embedding', 'stored': True, 'typeClass': 'solr.DenseVectorField'}
         responses = [{'uniqueKey': 'id'}, page([
             {'dq_key': 'a', 'dq_value0': True}, {'dq_key': 'b', 'dq_value0': False}], 'one')]
-        with patch('dq.processors.missing_fields.processor.list_fields', return_value=[field]), \
+        with patch('dq.rules.missing_fields_base.processor.list_fields', return_value=[field]), \
                 patch('dq.stored.get_json', side_effect=responses) as get, patch('sys.stderr', io.StringIO()):
-            header, pages = load_handler('missing_fields', 'csv')('url', row_limit=2)
+            header, pages = load_handler('missing_fields_base', 'csv')('url', row_limit=2)
             records = [row for batch in pages for row in batch]
-        self.assertEqual(records, [('b', 'missing_fields: missing or null', '')])
+        self.assertEqual(records, [('b', 'missing_fields_base: missing or null', '')])
         self.assertEqual(get.call_args[1]['fl'], 'dq_key:id,dq_value0:exists(embedding)')
         self.assertNotIn('fq', get.call_args[1])
         # An absent presence flag is a failed response, not evidence of presence.
-        with patch('dq.processors.missing_fields.processor.list_fields', return_value=[field]), \
+        with patch('dq.rules.missing_fields_base.processor.list_fields', return_value=[field]), \
                 patch('dq.stored.get_json', side_effect=[{'uniqueKey': 'id'}, page([{'dq_key': 'a'}], 'one')]), \
                 patch('sys.stderr', io.StringIO()):
-            _, pages = load_handler('missing_fields', 'csv')('url', row_limit=1)
+            _, pages = load_handler('missing_fields_base', 'csv')('url', row_limit=1)
             with self.assertRaises(stored.SolrError):
                 list(pages)
 
     def test_each_csv_processor_passes_limit_to_shared_pager(self):
         fields = [{'name': 'email_s', 'stored': True, 'type': 'string'},
                   {'name': 'date_dt', 'stored': True, 'type': 'pdate'}]
-        for name in ('standard_text', 'code_points', 'email', 'ssn', 'us_phone'):
+        for name in ('standard_text_composite', 'code_points_base', 'email_composite', 'ssn_composite', 'us_phone_composite'):
             with patch('dq.stored.fields', return_value=fields), \
                     patch('dq.stored.values', return_value=iter([])) as scan:
                 _, pages = load_handler(name, 'csv')('url', row_limit=4)
@@ -250,7 +250,7 @@ class ReportLimitTests(unittest.TestCase):
                 self.assertIn('10', stream.read())
 
     def test_deferred_date_report_does_not_scan(self):
-        from dq.processors import ReportError
+        from dq.errors import ReportError
         with patch('dq.stored.values') as scan, self.assertRaises(ReportError):
             load_handler('date_checker', 'report')('url', 'date_checker.md', row_limit=3)
         self.assertFalse(scan.called)

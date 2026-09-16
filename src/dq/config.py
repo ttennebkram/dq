@@ -1,6 +1,5 @@
 """Configuration discovery and target URL construction for DQ."""
 import configparser
-import io
 import os
 from dq.files import absolute_path, write_text
 from dq.limits import row_limit, progress_interval, boolean_option
@@ -190,19 +189,6 @@ def write_config(path, main_url, collection, username=None, password=None, trust
             lines.append(name + ' =')
             lines.extend('    ' + pattern for pattern in patterns)
     contents = '\n'.join(lines) + '\n'
-    if os.path.isfile(path):
-        saved = configparser.ConfigParser(interpolation=None)
-        saved.optionxform = str
-        with open(path, encoding='utf-8') as stream:
-            saved.read_file(stream)
-        saved.defaults().clear()
-        for section in saved.sections():
-            if section != 'checkup':
-                saved.remove_section(section)
-        if saved.has_section('checkup'):
-            extra = io.StringIO()
-            saved.write(extra)
-            contents += '\n' + extra.getvalue()
     try:
         write_text(path, contents)
     except OSError as error:

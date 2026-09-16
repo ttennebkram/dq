@@ -30,7 +30,7 @@ additional checks DQ recommends from field types and names.
 ## 4. Check Email Values
 
 ```sh
-bin/dq --rule email --action csv --include_field email_t
+bin/dq --rule email_composite --action csv --include_field email_t
 ```
 
 Open `reports/email_t_email.csv`. Show its `id,reason,value` columns and a few

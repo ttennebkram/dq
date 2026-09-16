@@ -130,23 +130,9 @@ def _report_option_details(options, config, target, output_path):
         elif name == 'password':
             value = '[redacted]'
         details.append((name, value, source))
-    directory = processor_directory(config)
-    if directory:
-        details.append(('processors directory', directory, 'directory convention'))
     sources = getattr(options, 'field_filter_sources', {})
     details = [(name, value, sources.get(name, source)) for name, value, source in details]
     return details
-
-
-
-
-
-def processor_directory(config):
-    """Find the conventional user processor directory beside dq.ini or in cwd."""
-    base = os.path.dirname(config.source) if config.source else os.getcwd()
-    directory = os.path.abspath(os.path.join(base, 'processors'))
-    return directory if os.path.isdir(directory) else None
-
 
 def reports_directory(options, config):
     supplied = getattr(options, 'reports_dir', None)

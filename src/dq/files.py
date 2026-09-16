@@ -52,7 +52,7 @@ def field_filename(field_name, rule_name, extension):
 def field_output_paths(directory, rule_name, fields, extension):
     """Plan per-field files before scanning or overwriting any outputs."""
     from collections import OrderedDict
-    from dq.processors import ReportError
+    from dq.errors import ReportError
     paths = OrderedDict()
     used = {}
     for field in fields:

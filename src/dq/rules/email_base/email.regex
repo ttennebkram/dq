@@ -1,0 +1,30 @@
+# Practical ASCII email-address syntax, not a complete RFC mailbox parser.
+# Based on RFC 5322 dot-atom local parts: https://www.rfc-editor.org/rfc/rfc5322
+# Requires a dotted hostname. Quoted local parts, address literals, display
+# names, and internationalized local parts are deliberately outside this preset.
+# A match does not establish that the domain or mailbox exists.
+# Use verbose mode and full matching, as configured in rule.ini.
+
+(?a)                            # Keep character classes ASCII with ignore-case.
+(?= .{1,254} \Z )               # Practical overall length limit.
+(?= [^@]{1,64} @ )              # Local part: at most 64 ASCII characters.
+
+# Local-part chunks contain letters, digits, or these literal characters:
+# ! exclamation mark, # hash, $ dollar sign, % percent, & ampersand,
+# ' apostrophe, * asterisk, + plus, / slash, = equals, ? question mark,
+# ^ caret, _ underscore, ` backtick, { opening brace, | vertical bar,
+# } closing brace, ~ tilde, and - hyphen.
+# A literal period (.) separates chunks, as in first.last. It cannot be
+# first, last, or repeated consecutively. A plus (+) is allowed within a
+# chunk for addresses like user+tag; an apostrophe (') is also allowed.
+[a-z0-9!#$%&'*+/=?^_`{|}~-]+
+(?: \. [a-z0-9!#$%&'*+/=?^_`{|}~-]+ )*
+# A literal at sign (@) separates the local part from the hostname.
+@
+
+# Hostname labels contain letters, digits, and internal hyphens (-).
+# Each label is 1-63 characters and cannot start or end with a hyphen (-).
+# A literal period (.) separates labels, as in example.com or sub.example.com.
+# Require at least one period (.); each subsequent label follows the same rule.
+[a-z0-9] (?: [a-z0-9-]{0,61} [a-z0-9] )?
+(?: \. [a-z0-9] (?: [a-z0-9-]{0,61} [a-z0-9] )? )+

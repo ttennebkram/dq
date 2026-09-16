@@ -22,8 +22,11 @@ Organize the main README with usage scenarios first, then developer sections,
 then licensing, copyright, and community/author information. Keep the detailed
 HTTPS and self-signed certificate walkthrough near the end of the usage sections.
 
-Keep the README Rules and Actions reference synchronized with the processor
+Keep the README Rules, Reports and Actions reference synchronized with the rule/report
 registry and CLI, including CSV availability and planned reports.
+
+Write rule names exactly as the CLI accepts them, preserving underscores and
+formatting them as code, for example `missing_fields_base` and `email_composite`.
 
 Place the FAQ immediately before License and Copyright in the main README.
 
@@ -40,8 +43,9 @@ small change. Use focused checks only when needed for the immediate change.
 Ordinary rules export CSV; do not add generic per-rule Markdown reports.
 Special reports coordinate checks and provide analysis, charts, and next steps.
 Quick checkup writes a single Markdown summary without CSVs. Full checkup automatically
-exports per-field CSV findings from its shared stored-value scan. Use --rule NAME --action csv
-for findings and --report NAME for special reports (--action report is implied).
+exports per-field CSV findings from its shared stored-value scan. Use --rule NAME
+for CSV findings (the CSV action is implied) and --report NAME for special reports
+(the report action is implied). Do not combine rules and reports in one run.
 Do not add a `--csv` shorthand.
 
 Date analysis and graphs are deferred beyond the MVP. Native date fields receive
@@ -50,3 +54,12 @@ only presence checks in automatic checkups, even with value-check overrides.
 CSV records contain only the first failed check for each value, in check order.
 Single-valued fields have at most one row per document; multivalued fields may
 have one row per failing value. Full-checkup counts and CSVs use the same rule.
+
+Keep base rules independent. Pure regex base rules do not silently run shared
+text checks. Predefined composites may contain other composites; recursively
+flatten them to one ordered base-rule list, reject cycles, and remove duplicate
+base rules while preserving their first occurrence. Report the first failing
+base rule so a composite gives the most specific available reason.
+
+Keep public rule packages under `src/dq/rules/`, with every directory name ending
+in `_base` or `_composite`. Keep special report packages under `src/dq/reports/`.

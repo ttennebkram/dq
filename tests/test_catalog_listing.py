@@ -18,14 +18,15 @@ class CatalogListingTests(unittest.TestCase):
         self.assertIn('REPORT', output)
         self.assertIn('STATUS', output)
         self.assertRegex(output, r'(?m)^quick_checkup\s+Implemented\s+')
-        self.assertRegex(output, r'(?m)^term_stats\s+Planned\s+')
+        self.assertNotIn('term_stats', output)
+        self.assertNotIn('date_checker', output)
 
     def test_list_rules_includes_base_and_composite_types(self):
         output = self.run_catalog('--list_rules')
         self.assertIn('RULE', output)
         self.assertIn('TYPE', output)
-        self.assertRegex(output, r'(?m)^email\s+Base\s+')
-        self.assertRegex(output, r'(?m)^standard_text\s+Composite\s+')
+        self.assertRegex(output, r'(?m)^email_base\s+Base\s+')
+        self.assertRegex(output, r'(?m)^email_composite\s+Predefined Composite\s+')
 
     def test_hyphenated_aliases_remain_accepted(self):
         self.assertIn('Reports:', self.run_catalog('--list-reports'))

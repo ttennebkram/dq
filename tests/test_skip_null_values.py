@@ -8,11 +8,11 @@ from dq.arguments import build_parser
 from dq.config import DqConfig, ConfigError, load_config, write_config
 from dq.main import main
 from dq.settings import resolve_skip_null_values
-from dq.processors.registry import load_handler
-from dq.processors.regex.definitions import definitions
-from dq.processors.regex.engine import findings
-from dq.processors._checkup.processor import scan
-from dq.processors.standard_text.processor import value_reasons
+from dq.registry import load_handler
+from dq.rules.regex.definitions import definitions
+from dq.rules.regex.engine import findings
+from dq.reports._checkup.processor import scan
+from dq.rules._text.processor import value_reasons
 
 
 FIELDS = [{'name': 'email_t', 'type': 'string', 'stored': True}]
@@ -22,13 +22,13 @@ SOURCE = [(str(i), 'email_t', value) for i, value in enumerate(VALUES)]
 
 class NullFilterTests(unittest.TestCase):
     def test_only_none_is_suppressed(self):
-        self.assertEqual(value_reasons(None), ['empty_values: null'])
+        self.assertEqual(value_reasons(None), ['missing_fields_base: missing or null'])
         self.assertEqual(value_reasons(None, True), [])
         for value in VALUES[1:] + [0, False]:
             self.assertEqual(value_reasons(value, True), value_reasons(value))
 
     def test_standard_and_regex_csv_retain_whitespace_and_other_findings(self):
-        for name in ('standard_text', 'email'):
+        for name in ('standard_text_composite', 'email_base'):
             outputs = []
             for skip in (False, True):
                 with patch('dq.stored.fields', return_value=FIELDS), patch('dq.stored.values', return_value=iter(SOURCE)) as fetch:
@@ -39,19 +39,19 @@ class NullFilterTests(unittest.TestCase):
             self.assertTrue(set(('1', '2', '3', '4')).issubset(row[0] for row in outputs[1]))
 
     def test_regex_success_never_includes_null_or_blank(self):
-        definition = dict(definitions()['email'], results='succeeded')
+        definition = dict(definitions()['email_base'], report='match')
         with patch('dq.stored.values', return_value=iter(SOURCE)):
             rows = list(findings(definition, 'url', FIELDS, skip_null_values=True))
         self.assertEqual([row[0] for row in rows], ['6'])
 
     def test_checkup_counts_drop_only_null_finding(self):
-        plans = {'email_t': dict((name, 'test') for name in ('missing_fields', 'standard_text', 'email'))}
+        plans = {'email_t': dict((name, 'test') for name in ('missing_fields_base', 'email_composite'))}
         outputs = []
         for skip in (False, True):
             with patch('dq.stored.values', return_value=iter(SOURCE)):
                 outputs.append(scan('url', FIELDS, plans, skip_null_values=skip)['email_t'])
-        self.assertEqual(outputs[1]['counts']['standard_text'], outputs[0]['counts']['standard_text'] - 1)
-        self.assertEqual(outputs[1]['counts']['email'], outputs[0]['counts']['email'])
+        self.assertEqual(outputs[1]['counts']['missing_fields_base'], outputs[0]['counts']['missing_fields_base'] - 1)
+        self.assertEqual(outputs[1]['counts']['email_base'], outputs[0]['counts']['email_base'])
         self.assertEqual(outputs[1]['examples'], [row for row in outputs[0]['examples'] if row[0] != '0'])
 
     def test_cli_bool_override_and_invalid_value(self):
@@ -99,7 +99,7 @@ class NullFilterTests(unittest.TestCase):
                 self.assertEqual(main(['--report', action, '--skip_null_values']), 0)
                 with open(os.path.join(root, 'reports', 'email_t_' + action + '.md')) as stream:
                     report = stream.read()
-                self.assertNotIn('empty_values: null', report)
-                self.assertIn('empty_values: empty string', report)
-                self.assertIn('empty_values: whitespace only', report)
+                self.assertNotIn('missing_fields_base: missing or null', report)
+                self.assertIn('empty_strings_base: empty string', report)
+                self.assertIn('whitespace_only_base: whitespace-only string', report)
                 self.assertTrue(any('skip_null_values' in line and 'true' in line and 'command line' in line for line in report.splitlines()))

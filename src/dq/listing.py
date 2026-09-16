@@ -1,12 +1,16 @@
 """Standard-output field listing."""
 from dq.field_selection import select_fields
-from dq.solr import list_fields
+from dq.search import list_fields, engine_name
 from dq.limits import PRESENCE_SCOPE
-from dq.processors.registry import report_catalog, rule_catalog
+from dq.registry import report_catalog, rule_catalog
 
 
 def _yes_no(value):
-    return 'yes' if value is True else 'no'
+    if value is True:
+        return 'yes'
+    if value is False:
+        return 'no'
+    return 'unknown'
 
 
 def _print_catalog(label, columns, rows):
@@ -41,7 +45,7 @@ def print_fields(target, *, include=(), exclude=(), configuration_path=None,
         field.get(key)) for _, key in columns] for field in fields]
     widths = [max([len(heading)] + [len(row[index]) for row in rows])
               for index, (heading, _) in enumerate(columns)]
-    print('Solr collection: {0}'.format(target.rstrip('/')))
+    print('{0} collection/index: {1}'.format(engine_name(target), target.rstrip('/')))
     if row_limit != -1:
         print(PRESENCE_SCOPE)
     if configuration_path is not None:

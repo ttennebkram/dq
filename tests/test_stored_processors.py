@@ -6,16 +6,15 @@ import os
 import tempfile
 import unittest
 from unittest.mock import patch
-from dq.config import load_config, write_config
+from dq.config import write_config
 from dq.arguments import build_parser
 from dq.main import main
-from dq.processors import ReportError
-from dq.processors.regex.definitions import read_definition, definitions
-from dq.processors.regex.engine import handler
-from dq.processors.standard_text.processor import reasons
-from dq.processors.date_checker.processor import parse_date
-from dq.reports.date_checker import write_report
-from dq.settings import processor_directory
+from dq.errors import ReportError
+from dq.rules.regex.definitions import read_definition, definitions
+from dq.rules.regex.engine import handler
+from dq.rules._text.processor import reasons
+from dq.reports.date_checker.processor import parse_date
+from dq.reports.date_checker.report import write_report
 from dq import stored
 
 
@@ -25,12 +24,11 @@ class ProcessorTests(unittest.TestCase):
         parser = configparser.ConfigParser(interpolation=None)
         parser.read_string(contents)
         for section in parser.sections():
-            for key in ('must_match', 'must_not_match'):
-                if parser.has_option(section, key):
-                    filename = section.replace(':', '_') + '_' + key + '.regex'
-                    with open(os.path.join(directory, filename), 'w') as stream:
-                        stream.write(parser.get(section, key))
-                    parser.set(section, key, filename)
+            if parser.has_option(section, 'regex_file'):
+                filename = section.replace(':', '_') + '.regex'
+                with open(os.path.join(directory, filename), 'w') as stream:
+                    stream.write(parser.get(section, 'regex_file'))
+                parser.set(section, 'regex_file', filename)
         with open(path, 'w') as stream:
             parser.write(stream)
         return read_definition(path)
@@ -42,12 +40,13 @@ class ProcessorTests(unittest.TestCase):
             pattern = 'Abc # literal\n'
             with open(pattern_path, 'w', newline='') as stream:
                 stream.write(pattern)
-            config_path = os.path.join(directory, 'processor.ini')
+            config_path = os.path.join(directory, 'rule.ini')
             with open(config_path, 'w') as stream:
-                stream.write('[processor]\nname = literal\nverbose = false\n'
-                             '[rule:literal]\nmust_match = patterns/literal.regex\n')
+                stream.write('[rule]\nreport = no_match\n'
+                             '[regex:regex01]\nregex_file = patterns/literal.regex\n'
+                             'case_sensitive = false\nregex_format = compact\n')
             definition = read_definition(config_path)
-            expression = definition['rules'][0][3][0]
+            expression = definition['rules'][0][2]
             self.assertEqual(expression.pattern, pattern)
             self.assertIsNotNone(expression.fullmatch('abc # literal\n'))
             self.assertIsNone(expression.fullmatch('abc # literal'))
@@ -56,22 +55,23 @@ class ProcessorTests(unittest.TestCase):
             with self.assertRaises(ReportError) as error:
                 read_definition(config_path)
             self.assertIn(pattern_path, str(error.exception))
-            self.assertIn('rule:literal', str(error.exception))
+            self.assertIn('regex:regex01', str(error.exception))
 
-    def test_must_match_files_are_or_with_one_finding_per_rule(self):
+    def test_regex_files_are_alternatives(self):
         with tempfile.TemporaryDirectory() as directory:
             for filename, pattern in [('letters.regex', '[a-z]+'), ('digits.regex', '[0-9]+')]:
                 with open(os.path.join(directory, filename), 'w') as stream:
                     stream.write(pattern)
             path = os.path.join(directory, 'alternatives.ini')
             with open(path, 'w') as stream:
-                stream.write('[processor]\nname = alternatives\n[rule:format]\n'
-                             'must_match = letters.regex\n    digits.regex\n')
+                stream.write('[rule]\nreport = no_match\n'
+                             '[regex:regex01]\nregex_file = letters.regex\nregex_format = compact\n'
+                             '[regex:regex02]\nregex_file = digits.regex\nregex_format = compact\n')
             definition = read_definition(path)
             self.assertEqual(len(definition['pattern_paths']), 2)
-            source = [('1', 'f', 'ABC'), ('2', 'f', '123'), ('3', 'f', '---')]
-            for result, expected in [('failed', ['3']), ('succeeded', ['1', '2'])]:
-                definition['results'] = result
+            source = [('1', 'f', 'abc'), ('2', 'f', '123'), ('3', 'f', '---')]
+            for report, expected in [('no_match', ['3']), ('match', ['1', '2'])]:
+                definition['report'] = report
                 with patch('dq.stored.fields', return_value=[{'name':'f'}]), patch('dq.stored.values', return_value=iter(source)):
                     _, pages = handler(definition, 'csv')('url')
                     rows = [row for page in pages for row in page]
@@ -82,15 +82,11 @@ class ProcessorTests(unittest.TestCase):
 
     def test_regex_modes_flags_and_reasons(self):
         with tempfile.TemporaryDirectory() as directory:
-            definition = self.definition(directory, '''[processor]
-name = custom
-[rule:format]
-must_match =
-    abc  # ignore case by default
-    [0-9]+
-[rule:forbidden]
-must_not_match = xxx
-match_mode = search
+            definition = self.definition(directory, '''[rule]
+report = no_match
+[regex:regex01]
+regex_file = abc [0-9]+
+case_sensitive = false
 ''')
             source = [('1', 'f', 'ABC12'), ('2', 'f', 'xxx,"value\r\n'), ('3','f','')]
             with patch('dq.stored.fields', return_value=[{'name':'f'}]), patch('dq.stored.values', return_value=iter(source)):
@@ -98,56 +94,56 @@ match_mode = search
                 rows = [r for page in pages for r in page]
             self.assertEqual(headers, ['id', 'reason', 'value'])
             self.assertEqual(len(rows), 2)
-            self.assertIn('surrounding_whitespace', rows[0][1])
-            self.assertIn('empty_values: empty string', rows[1][1])
-            definition['results'] = 'succeeded'
+            self.assertTrue(all('no configured regex matched' in row[1] for row in rows))
+            definition['report'] = 'match'
             with patch('dq.stored.fields', return_value=[{'name':'f'}]), patch('dq.stored.values', return_value=iter(source[:1])):
                 _, pages = handler(definition, 'csv')('url')
                 self.assertEqual(len(list(pages)[0]), 1)
 
-    def test_regex_blank_failures_for_both_result_modes(self):
-        from dq.processors.regex.engine import findings
+    def test_regex_blank_values_for_both_match_meanings(self):
+        from dq.rules.regex.engine import findings
         import re
         source = [('null', 'f', None), ('empty', 'f', ''), ('space', 'f', ' '),
                   ('tabs', 'f', '\t\r\n'), ('unicode', 'f', '\u00a0\u2003'),
                   ('zero', 'f', 0), ('false', 'f', False)]
-        for kind in ('must_match', 'must_not_match'):
-            definition = {'name': 'check', 'rules': [
-                ('anything', kind, 'full', [re.compile('.*')]),
-                ('second', kind, 'full', [re.compile('.*')])]}
-            for result in ('failed', 'succeeded'):
-                definition['results'] = result
-                with patch('dq.stored.values', return_value=iter(source)):
-                    rows = list(findings(definition, 'url', []))
-                ids = [row[0] for row in rows]
-                blanks = ['null', 'empty', 'space', 'tabs', 'unicode'] if result == 'failed' else []
-                succeeds = kind == 'must_match'
-                self.assertEqual(ids, blanks + (['zero', 'false']
-                    if succeeds == (result == 'succeeded') else []))
-                if result == 'failed':
-                    self.assertEqual([row[1] for row in rows[:5]],
-                        ['check: empty_values: null', 'check: empty_values: empty string'] + ['check: empty_values: whitespace only'] * 3)
-                    self.assertEqual([row[2] for row in rows[:5]], ['', '', ' ', '\t\r\n', '\u00a0\u2003'])
+        definition = {'name': 'check', 'rules': [
+            ('regex01', 'full', re.compile(r'[\s\S]*')),
+            ('regex02', 'full', re.compile(r'[\s\S]*'))]}
+        for report in ('no_match', 'match'):
+            definition['report'] = report
+            with patch('dq.stored.values', return_value=iter(source)):
+                rows = list(findings(definition, 'url', []))
+            ids = [row[0] for row in rows]
+            self.assertEqual(ids, [item[0] for item in source] if report == 'match' else [])
+            if report == 'match':
+                self.assertTrue(all(row[1].startswith('check: regex regex01 matched') for row in rows))
+                self.assertEqual([row[2] for row in rows[:5]], ['', '', ' ', '\t\r\n', '\u00a0\u2003'])
 
-    def test_invalid_regex_and_duplicate_processors(self):
+    def test_invalid_regex_definitions(self):
         with tempfile.TemporaryDirectory() as directory:
-            for rule in ['must_match = [', 'must_match = a\nmust_not_match = b', 'must_match = a\ncase_sensitive = maybe']:
-                with self.assertRaises(ReportError):
-                    self.definition(directory, '[processor]\nname = custom\n[rule:x]\n' + rule)
-            self.definition(directory, '[processor]\nname = us_phone\n[rule:x]\nmust_match = a')
             with self.assertRaises(ReportError):
-                definitions(directory)
+                self.definition(directory, '[rule]\nname = custom\nreport = no_match\n'
+                                '[regex:regex01]\nregex_file = a')
+            with self.assertRaises(ReportError):
+                self.definition(directory, '[rule]\n'
+                                '[regex:regex01]\nregex_file = a')
+            for rule in ['regex_file = [', 'regex_file = a\ncase_sensitive = maybe',
+                         'regex_file = a\nregex_format = wide',
+                         'regex_file = a\nmatch_mode = search']:
+                with self.assertRaises(ReportError):
+                    self.definition(directory, '[rule]\nreport = no_match\n'
+                                    '[regex:regex01]\n' + rule)
 
     def test_case_sensitive_multiline_and_literal_hash(self):
         with tempfile.TemporaryDirectory() as directory:
-            definition = self.definition(directory, '''[processor]
-name = custom
-case_sensitive = true
+            definition = self.definition(directory, '''[rule]
+report = no_match
+[regex:regex01]
+regex_file = ^Abc[ ]\\#\ncase_sensitive = true
 multiline = true
-[rule:line]
-must_match = ^Abc[ ]\\#\nmatch_mode = search
+match_mode = partial
 ''')
-            expression = definition['rules'][0][3][0]
+            expression = definition['rules'][0][2]
             self.assertIsNotNone(expression.search('first\nAbc #'))
             self.assertIsNone(expression.search('first\nabc #'))
 
@@ -175,43 +171,36 @@ must_match = ^Abc[ ]\\#\nmatch_mode = search
             self.assertIn('<svg', svg)
             self.assertLessEqual(svg.count('<rect'), 61)
 
-    def test_user_directory_ini_write_and_cli_csv(self):
+    def test_external_custom_rules_directory_is_not_discovered_in_mvp(self):
         with tempfile.TemporaryDirectory() as directory:
-            processors = os.path.join(directory, 'processors')
-            os.mkdir(processors)
-            self.definition(processors, '[processor]\nname = custom\n[rule:x]\nmust_match = valid')
+            custom_rules = os.path.join(directory, 'custom_rules')
+            os.mkdir(custom_rules)
+            self.definition(custom_rules, '[rule]\nreport = no_match\n'
+                            '[regex:regex01]\nregex_file = valid')
             path = os.path.join(directory, 'dq.ini')
             write_config(path, 'http://solr/c', None)
-            config = load_config(path)
-            self.assertEqual(processor_directory(config), os.path.realpath(processors))
-            source = [('1','f','bad,"text\r\n')]
-            with patch('dq.stored.fields', return_value=[{'name':'f'}]), patch('dq.stored.values', return_value=iter(source)), patch('sys.stdout',io.StringIO()) as out, patch('sys.stderr',io.StringIO()):
-                self.assertEqual(main(['--config',path,'--rule','custom','--action','csv','--reports_dir',directory]), 0)
-            self.assertIn('f_custom.csv', out.getvalue())
-            self.assertNotIn(source[0][2], out.getvalue())
-            with open(os.path.join(directory, 'f_custom.csv'), encoding='utf-8', newline='') as stream:
-                rows = list(csv.reader(stream))
-            self.assertEqual(rows[0], ['id','reason','value'])
-            self.assertEqual(rows[1][2], source[0][2])
+            with patch('sys.stderr', io.StringIO()) as err, self.assertRaises(SystemExit):
+                main(['--config', path, '--rule', 'custom', '--reports_dir', directory])
+            self.assertIn('unknown rule: custom', err.getvalue())
+            self.assertFalse(os.path.exists(os.path.join(directory, 'f_custom.csv')))
 
-    def test_successful_regex_exports_are_labeled_as_passing(self):
+    def test_invalid_matches_are_labeled_as_offending(self):
         with tempfile.TemporaryDirectory() as directory:
-            processors = os.path.join(directory, 'processors')
-            os.mkdir(processors)
-            self.definition(processors, '[processor]\nname=custom\nresults=succeeded\n[rule:x]\nmust_match=valid')
+            definition = self.definition(directory, '[rule]\nreport=match\n'
+                                         '[regex:regex01]\nregex_file=valid')
             path = os.path.join(directory, 'dq.ini')
             write_config(path, 'http://solr/c', None, reports_dir=directory)
             source = [('1', 'f', 'valid'), ('2', 'f', 'invalid')]
-            with patch('dq.stored.fields', return_value=[{'name': 'f'}]), \
+            with patch('dq.actions.load_handler', return_value=handler(definition, 'csv')), \
+                    patch('dq.stored.fields', return_value=[{'name': 'f'}]), \
                     patch('dq.stored.values', return_value=iter(source)), \
                     patch('sys.stdout', io.StringIO()), patch('sys.stderr', io.StringIO()) as err:
-                self.assertEqual(main(['--config', path, '--rule', 'custom', '--action', 'csv']), 0)
+                self.assertEqual(main(['--config', path, '--rule', 'custom']), 0)
             with open(os.path.join(directory, 'f_custom.csv'), newline='') as stream:
                 rows = list(csv.reader(stream))
             self.assertEqual(len(rows), 2)
             self.assertEqual(rows[1][0], '1')
-            self.assertIn('Passing records exported: 1', err.getvalue())
-            self.assertNotIn('Offending records exported', err.getvalue())
+            self.assertIn('Offending records exported: 1', err.getvalue())
 
     def test_stored_paging_aliases_multivalues_and_partial_rejection(self):
         responses = [{'uniqueKey':'key_s'}, {'response':{'docs':[{'dq_key':'a','dq_value0':['x',None,'y']}]},'nextCursorMark':'next'}, {'response':{'docs':[]},'nextCursorMark':'next'}]

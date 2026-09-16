@@ -156,7 +156,7 @@ class WizardTests(unittest.TestCase):
     def test_action_conflicts(self):
         for action in (['--write_config'], ['--list_fields'], ['--list_reports'],
                        ['--list_rules'], ['--report', 'quick_checkup'],
-                       ['--rule', 'missing_fields', '--action', 'csv']):
+                       ['--rule', 'missing_fields_base', '--action', 'csv']):
             with patch('sys.stderr', io.StringIO()), self.assertRaises(SystemExit) as error:
                 main(['--config_wizard'] + action)
             self.assertEqual(error.exception.code, 2)

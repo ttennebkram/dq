@@ -11,7 +11,7 @@ from unittest.mock import patch
 from dq.arguments import build_parser, resolve_selection
 from dq.config import DqConfig
 from dq.main import main
-from dq.processors.registry import report_names, csv_names
+from dq.registry import report_names, csv_names
 
 
 class RuleActionTests(unittest.TestCase):
@@ -22,13 +22,17 @@ class RuleActionTests(unittest.TestCase):
         return options
 
     def test_explicit_rule_and_action_selection(self):
-        for args in (['--rule', 'email', '--action', 'csv'],
-                     ['--rules', 'email', '--action', 'csv']):
+        for args in (['--rule', 'email_composite', '--action', 'csv'],
+                     ['--rules', 'email_composite', '--action', 'csv']):
             options = self.selection(args)
-            self.assertEqual(options.rule, ['email'])
+            self.assertEqual(options.rule, ['email_composite'])
             self.assertEqual(options.action, 'csv')
-        options = self.selection(['--rules', 'standard_text', 'email', '--action', 'csv'])
-        self.assertEqual(options.rule, ['standard_text', 'email'])
+        options = self.selection(['--rule', 'email_composite'])
+        self.assertEqual(options.rule, ['email_composite'])
+        self.assertEqual(options.action, 'csv')
+        self.assertEqual(options.action_source, 'default for --rule/--rules')
+        options = self.selection(['--rules', 'standard_text_composite', 'email_composite', '--action', 'csv'])
+        self.assertEqual(options.rule, ['standard_text_composite', 'email_composite'])
         for args, expected in ((['--report', 'quick_checkup'], ['quick_checkup']),
                                (['--action', 'report', '--reports', 'quick_checkup'], ['quick_checkup']),
                                (['--report', 'quick_checkup', 'full_checkup'], ['quick_checkup', 'full_checkup']),
@@ -39,10 +43,10 @@ class RuleActionTests(unittest.TestCase):
             self.assertEqual(options.action, 'report')
 
     def test_invalid_combinations_before_loading_configuration(self):
-        cases = [['--rule', 'email', '--action', 'report'],
-                 ['--rule', 'email', '--report', 'quick_checkup'],
+        cases = [['--rule', 'email_composite', '--action', 'report'],
+                 ['--rule', 'email_composite', '--report', 'quick_checkup'],
                  ['--report', 'quick_checkup', '--action', 'csv'],
-                 ['--rule', 'email', '--action', 'csv', '--list_fields'],
+                 ['--rule', 'email_composite', '--action', 'csv', '--list_fields'],
                  ['--action', 'modify']]
         for args in cases:
             with patch('dq.main.load_config') as load, patch('sys.stderr', io.StringIO()), self.assertRaises(SystemExit) as error:
@@ -51,8 +55,7 @@ class RuleActionTests(unittest.TestCase):
             self.assertFalse(load.called)
 
     def test_missing_selection_names_the_missing_piece_after_target(self):
-        for args, message in [(['--rule', 'email'], 'no action was selected'),
-                              (['--action', 'csv'], 'no rule was selected'),
+        for args, message in [(['--action', 'csv'], 'no rule was selected'),
                               (['--action', 'report'], 'no report was selected')]:
             with patch('dq.main.load_config', return_value=DqConfig(main_url='http://solr/c')), \
                     patch('sys.stderr', io.StringIO()) as err, self.assertRaises(SystemExit):
@@ -61,14 +64,14 @@ class RuleActionTests(unittest.TestCase):
             self.assertIn(message, err.getvalue())
 
     def test_ordinary_rules_have_no_generic_markdown(self):
-        for rule in ('standard_text', 'code_points', 'email', 'ssn', 'us_phone'):
+        for rule in ('standard_text_composite', 'code_points_base', 'email_composite', 'ssn_composite', 'us_phone_composite'):
             self.assertIn(rule, csv_names())
             self.assertNotIn(rule, report_names())
             with patch('dq.actions.load_config', return_value=DqConfig(main_url='http://solr/c')), \
                     patch('dq.stored.values') as scan, patch('sys.stderr', io.StringIO()) as err, self.assertRaises(SystemExit):
                 main(['--report', rule])
             self.assertFalse(scan.called)
-            self.assertIn('--action csv', err.getvalue())
+            self.assertIn('is a rule; use --rule', err.getvalue())
 
     def test_rule_dispatch_writes_csv(self):
         with tempfile.TemporaryDirectory() as root, patch('os.getcwd', return_value=root), \
@@ -76,9 +79,9 @@ class RuleActionTests(unittest.TestCase):
                 patch('dq.stored.fields', return_value=[{'name': 'email_t', 'type': 'string', 'stored': True}]), \
                 patch('dq.stored.values', return_value=iter([('1', 'email_t', 'bad')])), \
                 patch('sys.stdout', io.StringIO()) as out, patch('sys.stderr', io.StringIO()):
-            self.assertEqual(main(['--rule', 'email', '--action', 'csv']), 0)
-            self.assertIn('  reports/email_t_email.csv', out.getvalue())
-            self.assertEqual(os.listdir(os.path.join(root, 'reports')), ['email_t_email.csv'])
+            self.assertEqual(main(['--rule', 'email_composite', '--action', 'csv']), 0)
+            self.assertIn('  reports/email_t_email_composite.csv', out.getvalue())
+            self.assertEqual(os.listdir(os.path.join(root, 'reports')), ['email_t_email_composite.csv'])
 
     def test_multiple_rules_share_scan_and_export_first_failure(self):
         source = [('1', 'email_t', ' bad@example.com'),
@@ -89,15 +92,15 @@ class RuleActionTests(unittest.TestCase):
                 patch('dq.stored.fields', return_value=[{'name': 'email_t', 'type': 'string', 'stored': True}]), \
                 patch('dq.stored.values', return_value=iter(source)) as scan, \
                 patch('sys.stdout', io.StringIO()) as out, patch('sys.stderr', io.StringIO()):
-            self.assertEqual(main(['--rules', 'standard_text', 'email', '--action', 'csv']), 0)
+            self.assertEqual(main(['--rules', 'standard_text_composite', 'email_composite', '--action', 'csv']), 0)
             self.assertEqual(scan.call_count, 1)
-            path = os.path.join(root, 'reports', 'email_t_standard_text_email.csv')
+            path = os.path.join(root, 'reports', 'email_t_standard_text_composite_email_composite.csv')
             with open(path, newline='') as stream:
                 rows = list(csv.reader(stream))
             self.assertEqual([row[0] for row in rows[1:]], ['1', '2'])
-            self.assertTrue(rows[1][1].startswith('standard_text:'))
-            self.assertTrue(rows[2][1].startswith('email:'))
-            self.assertIn('reports/email_t_standard_text_email.csv', out.getvalue())
+            self.assertTrue(rows[1][1].startswith('surrounding_whitespace_base:'))
+            self.assertTrue(rows[2][1].startswith('email_base:'))
+            self.assertIn('reports/email_t_standard_text_composite_email_composite.csv', out.getvalue())
 
 
 class SpecialReportTests(unittest.TestCase):
@@ -128,7 +131,7 @@ class SpecialReportTests(unittest.TestCase):
             self.assertEqual(rows[0], ['id', 'reason', 'value'])
             self.assertEqual(rows[1][0], long_id)
             self.assertEqual(rows[1][2], long_value)
-            self.assertTrue(rows[1][1].startswith('email: regex'))
+            self.assertTrue(rows[1][1].startswith('email_base: no configured regex matched'))
             with open(os.path.join(root, 'reports', 'clean_t_full_checkup.csv'), newline='') as stream:
                 self.assertEqual(list(csv.reader(stream)), [['id', 'reason', 'value']])
             self.assertFalse(os.path.exists(os.path.join(root, 'reports', 'vector_full_checkup.csv')))
@@ -183,12 +186,12 @@ class SpecialReportTests(unittest.TestCase):
                 rows = list(csv.reader(stream))
             self.assertEqual(len(rows), 1003)
             self.assertEqual(rows[-1][0], '1001')
-            self.assertTrue(all(row[1] == 'standard_text: empty_values: empty string' for row in rows[1:]))
+            self.assertTrue(all(row[1] == 'empty_strings_base: empty string' for row in rows[1:]))
             with open(os.path.join(root, 'reports', 'notes_t_full_checkup.md')) as stream:
                 report = stream.read()
             self.assertIn('Finding rows: 1,002', report)
-            self.assertEqual(report.count('standard_text: empty_values: empty string'), 100)
-            self.assertNotIn('empty_values: null', report)
+            self.assertEqual(report.count('empty_strings_base: empty string'), 100)
+            self.assertNotIn('missing_fields_base: missing or null', report)
             self.assertIn('Non-null stored values scanned: 1,002', report)
             self.assertIn('CSV records: 1,002', report)
 
@@ -209,7 +212,7 @@ class ReportLinkTests(unittest.TestCase):
         self.assertEqual(query['fq'], ['{!frange l=0 u=0}exists($dq_field)'])
 
     def test_date_report_embeds_and_returns_graph(self):
-        from dq.reports.date_checker import write_report
+        from dq.reports.date_checker.report import write_report
         with tempfile.TemporaryDirectory() as root, \
                 patch('dq.stored.fields', return_value=[{'name': 'created_dt', 'type': 'pdate'}]), \
                 patch('dq.stored.values', return_value=iter([('1', 'created_dt', '2024-01-01')])):

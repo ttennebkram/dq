@@ -86,7 +86,7 @@ class CliTests(unittest.TestCase):
     def test_repeated_report_lists_are_flattened(self):
         with patch("dq.actions.load_config", return_value=DqConfig()), \
              patch("dq.actions.collection_url", return_value="http://solr/c"), \
-             patch("dq.reports.quick_checkup.write_report") as write, \
+             patch("dq.reports.quick_checkup.report.write_report") as write, \
              redirect_stdout(io.StringIO()):
             self.assertEqual(main(["--report", "quick_checkup", "quick_checkup",
                                    "--reports", "quick_checkup"]), 0)
@@ -95,19 +95,19 @@ class CliTests(unittest.TestCase):
         self.assertEqual(details[0][1], "quick_checkup")
 
     def test_rule_action_replaces_old_flags_and_csv_alias(self):
-        options = build_parser().parse_args(['--rule', 'missing_fields', '--action', 'csv'])
+        options = build_parser().parse_args(['--rule', 'missing_fields_base', '--action', 'csv'])
         resolve_selection(options, build_parser())
-        self.assertEqual(options.rule, ['missing_fields'])
+        self.assertEqual(options.rule, ['missing_fields_base'])
         self.assertEqual(options.action, 'csv')
         for flag in ('--ids', '-id', '--csv'):
             with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
-                build_parser().parse_args([flag, 'missing_fields'])
+                build_parser().parse_args([flag, 'missing_fields_base'])
 
     def test_action_conflict_is_rejected_before_network(self):
         for other in (["--report", "quick_checkup"], ["--list_fields"], ["--write_config"]):
             with self.subTest(other=other), patch("dq.actions.load_config") as load, \
                  redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
-                main(["--rule", "missing_fields", "--action", "csv"] + other)
+                main(["--rule", "missing_fields_base", "--action", "csv"] + other)
             self.assertEqual(error.exception.code, 2)
             self.assertFalse(load.called)
 
@@ -116,14 +116,14 @@ class CliTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             with patch("dq.actions.load_config", return_value=DqConfig(reports_dir=directory)), \
                  patch("dq.actions.collection_url", return_value="http://solr/c"), \
-                 patch("dq.processors.missing_fields.processor.list_fields", return_value=fields), \
+                 patch("dq.rules.missing_fields_base.processor.list_fields", return_value=fields), \
                  patch("dq.stored.values", return_value=iter((v, "title_s", False) for batch in pages for v in batch)) as fetch, \
                  redirect_stdout(stdout), redirect_stderr(stderr):
                 try:
-                    status = main(["--rule", "missing_fields", "--action", "csv", "--rows", "100"])
+                    status = main(["--rule", "missing_fields_base", "--action", "csv", "--rows", "100"])
                 except SystemExit as error:
                     status = error.code
-            path = os.path.join(directory, 'title_s_missing_fields.csv')
+            path = os.path.join(directory, 'title_s_missing_fields_base.csv')
             contents = ''
             if os.path.isfile(path):
                 with open(path, encoding='utf-8', newline='') as stream:
@@ -134,7 +134,7 @@ class CliTests(unittest.TestCase):
     def test_csv_findings_go_to_named_file(self):
         status, out, err, _ = self.run_export([{"name": "title_s", "stored": True}], [["a", "b"], ["c"]])
         self.assertEqual(status, 0)
-        self.assertEqual(out, "id,reason,value\r\na,missing_fields: missing or null,\r\nb,missing_fields: missing or null,\r\nc,missing_fields: missing or null,\r\n")
+        self.assertEqual(out, "id,reason,value\r\na,missing_fields_base: missing or null,\r\nb,missing_fields_base: missing or null,\r\nc,missing_fields_base: missing or null,\r\n")
         self.assertIn("Offending records exported: 3", err)
 
     def test_csv_header_without_matches(self):
@@ -148,7 +148,7 @@ class CliTests(unittest.TestCase):
         values = ['with,comma', 'a"quote', 'café', '00123']
         status, out, _, _ = self.run_export([{'name': 'title_s', 'stored': True}], [values])
         self.assertEqual(status, 0)
-        self.assertEqual(list(csv.reader(io.StringIO(out))), [['id', 'reason', 'value']] + [[v, 'missing_fields: missing or null', ''] for v in values])
+        self.assertEqual(list(csv.reader(io.StringIO(out))), [['id', 'reason', 'value']] + [[v, 'missing_fields_base: missing or null', ''] for v in values])
         self.assertIn('"with,comma"', out)
         self.assertIn('"a""quote"', out)
 

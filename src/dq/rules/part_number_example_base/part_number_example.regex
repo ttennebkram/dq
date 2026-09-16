@@ -1,0 +1,6 @@
+[a-z]{3}       # Three letters
+- [0-9]{6}     # Dash and six digits
+
+# Reminder: Spaces are ignored in verbose regex format.
+# Therefore, this only matches AAA-000000 with no spaces.
+# To match a space, use \s or [ ]

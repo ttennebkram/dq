@@ -46,25 +46,29 @@ class CompatibilityTests(unittest.TestCase):
                 get_json('http://solr/c', 'select')
 
     def test_exact_options_and_equals_syntax(self):
-        options = build_parser().parse_args(['--main-url=http://solr/c', '--rule', 'missing_fields', '--action', 'csv'])
+        options = build_parser().parse_args(['--main-url=http://solr/c', '--rule', 'missing_fields_base', '--action', 'csv'])
         self.assertEqual(options.main_url, 'http://solr/c')
         with patch('sys.stderr', io.StringIO()), self.assertRaises(SystemExit) as error:
             build_parser().parse_args(['--incl', 'title_s'])
         self.assertEqual(error.exception.code, 2)
 
-    def test_help_option_order_and_conventional_processor_directory(self):
+    def test_help_option_order_and_no_custom_rules_directory_option(self):
         help_text = build_parser().format_help()
-        option_text = help_text[help_text.index('Configuration, Target, and Output:'):]
+        option_text = help_text[help_text.index('Configuration and Output:'):]
         ordered = ['--config FILE', '--main_url URL', '--collection NAME',
-                   '--list_fields', '--username NAME', '--password PASSWORD',
-                   '--reports_dir DIR', '--rows N, --size N']
+                   '--username NAME', '--password PASSWORD', '--reports_dir DIR']
         positions = [option_text.index(item) for item in ordered]
         self.assertEqual(positions, sorted(positions))
         self.assertNotIn('--processor_dir', help_text)
-        self.assertIn('Configuration options:', help_text)
+        self.assertIn('By default looks for dq.ini in the current directory or a parent directory.', help_text)
         self.assertIn('Rules:\n', help_text)
         self.assertIn('--list_reports', help_text)
         self.assertIn('--list_rules', help_text)
+        utility_text = help_text[help_text.index('Utility Commands (choose one):'):]
+        self.assertIn('--list_fields', utility_text)
+        output_text = help_text[help_text.index('Output and Scanning:'):]
+        self.assertLess(output_text.index('--rows N, --size N'),
+                        output_text.index('--skip_null_values'))
 
 
 if __name__ == '__main__':

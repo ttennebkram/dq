@@ -20,7 +20,7 @@ PowerShell or Command Prompt on Windows.
 - [Using HTTPS](#using-https)
 - [Vocabulary](#vocabulary)
 - [FAQ](#faq)
-- [Developers](#developers)
+- [Development and Custom Rules](#development-and-custom-rules)
 - [License and Copyright](#license-and-copyright)
 - [More Help](#more-help)
 
@@ -350,109 +350,35 @@ The shared ES/OpenSearch loader accepts `--main_url`, `--index`, `--data_files_d
 A legacy `[opensearch]` section is used only when `[elasticsearch]` is absent.
 With no configured URL, the default is `http://localhost:9200` (9201 for a legacy
 OpenSearch-only section). Use separate INI files when the servers need different credentials.
-DQ report execution for these engines remains planned.
+DQ can list fields, run checkups, and apply stored-value rules to these indexes.
 
 ## Automatic Checkup
 
+These examples assume basic connection parameters are stored in `dq.ini`.
+
 ```sh
 bin/dq --report quick_checkup
-bin/dq --report full_checkup --include_field email_t
+bin/dq --report full_checkup --include_field email_t --rows 1_000
 ```
 
-`quick_checkup` prints the final list of generated files on success, plus a directory-creation
-message if needed. It does not scan stored values or print progress dots.
-`full_checkup` prints its field/test plan, presence-query progress, and report-writing
-steps to stdout. Its shared stored-value scan names the fields being processed
-and prints one immediately flushed dot per 1,000 source documents by default.
-See [Scan Progress](docs/configuration.md#scan-progress) to change the interval. Reports are written
-to Markdown files, so you can redirect progress with `>checkup-progress.log`.
+| Report | What It Does | Main Output |
+| ------ | ------------ | ----------- |
+| `quick_checkup` | Counts field presence and suggests rules without fetching stored values. | `reports/quick_checkup.md` |
+| `full_checkup` | Scans stored values and runs the selected rules. | `reports/full_checkup.md`, linked field details, and CSV findings |
 
-`quick_checkup` writes `quick_checkup.md` with indexed field-presence
-counts, suggested checks, and a Full Report Workload Estimate after the results: documents, stored
-fields, approximate 1,000-document pages, and checks per field. Its approximate
-runtime range uses a manually maintained reference rate for a MacBook Pro M4;
-actual time varies with field sizes, selected fields, server load, and network
-speed. Quick checkup never fetches stored values or runs the suggested regex or
-Unicode checks.
+`full_checkup` can be slow on large datasets. Use `--include_fields` to focus on
+critical fields and `--rows` / `--size` to limit test runs. See
+[Checkup Reports](docs/configuration.md#checkup-reports) for output details and
+[Scan Progress](docs/configuration.md#scan-progress) for progress settings.
 
-`full_checkup` writes `full_checkup.md`, with linked per-field details, CSV
-findings. By default it scans all documents; `--rows` / `--size` limits
-the stored-value scan described below.
-Keep the adjacent `FIELD_NAME_full_checkup.md` and `.csv` files
-with the overview. Use `--report full_checkup` to create its Markdown and CSVs
-together. Neither checkup is a standalone CSV rule.
+### Automatic Rule Selection
 
-All selected stored fields get missing-value checks. Unicode (`standard_text`)
-checks are selected only for schema text/string fields, not numbers, booleans,
-dates, or vectors. Native date and vector fields get presence checks only; their stored arrays are
-not fetched or analyzed, including when an override requests value checks.
+DQ looks at the name and base type of each field to decide what rules to
+automatically apply. You can always apply a specific rule to a specific field
+with the command-line options `--rule <RULE_NAME> --include_field <FIELD_PATTERN>`.
 
-For specialized checks, DQ converts a field name to lowercase components. It
-splits at punctuation, underscores, and camel-case boundaries, then compares
-whole components rather than substrings:
-
-| Inferred rule | Matching field-name components | Examples |
-| ------------- | ------------------------------ | -------- |
-| `email` | `email` or `mail` | `email_t`, `primaryEmail`, `mail_address_s` |
-| `us_phone` | `phone`, `mobile`, `telephone`, or `tel` | `phone_t`, `mobileNumber`, `home_tel_s` |
-| `ssn` | `ssn`, or both `social` and `security` | `ssn_t`, `customerSSN`, `social_security_number_s` |
-
-Matching uses whole components, so `microphone_s` is one `microphone`
-component and does not trigger `us_phone`. Schema suffixes such as `_s` and
-`_t` do not affect the match. Name-based selections are labeled as inferred
-and can be replaced with `[checkup]` overrides.
-
-Use an optional `[checkup]` section in the loaded DQ INI file to replace the
-inferred checks for matching field names:
-
-```ini
-[checkup]
-contact_s = missing_fields, standard_text, email
-legacy_date_s = missing_fields, standard_text
-ignored_* = none
-```
-
-Patterns are case-sensitive globs. Each field may match at most one override;
-ambiguous matches and unknown check names are errors. Include/exclude filters
-still apply first. `none` disables all checks for that field. Config writing and
-the wizard preserve this section. The wizard does not edit individual overrides.
-Supported checks are `missing_fields`, `empty_values`, `standard_text`,
-`code_points`, `email`, `us_phone`, and `ssn`. `empty_values` is
-an internal checkup step, not a standalone report or CSV action.
-
-Value checks share one paged scan; missing counts use separate Solr existence
-queries, consistent with `missing_fields`, rather than directly inspecting nulls.
-Text checks retain missing/null values; arrays expand into individual values.
-Each detail report retains up to 100 examples, truncated to 500 characters.
-Counts represent finding rows, not distinct documents. Unusual characters are review indicators, not automatic proof of bad data. Concurrent
-index changes can affect results; the checkup is not a snapshot.
-
-### Checkup Output and Next Steps
-
-`quick_checkup` writes a single Markdown report with a Results table: fields,
-**Docs w/Value**, **Docs w/o Value**, and suggested checks, in that order.
-These columns count documents with and without a field value. Counts use Solr
-field-presence queries. Full checkup adds text and regex validation.
-**Presence check only** means the field gets document counts; **Disabled** means
-its checks were turned off in the configuration.
-**Run Additional Checks** provides commands using actual field names and
-suggested rules. Examples show a focused CSV export and a full checkup for
-that field, with a document limit. They have not been executed.
-
-**Full Report Workload Estimate** follows those examples and covers all selected
-fields together. Presence-only selections are explained without a misleading
-list of zero scan counts. A rows limit of zero or an empty collection is stated
-explicitly. Runtime is not estimated from document counts alone.
-
-`full_checkup` writes its overview and field-detail Markdown reports.
-It summarizes counts and the first 100 findings per
-field from one shared scan. That same scan automatically writes
-`FIELD_NAME_full_checkup.csv` for each field with stored-value checks. CSVs
-contain all findings with full IDs and values, and the report links to them.
-A field with zero findings gets a header-only CSV; presence-only fields have
-counts but no CSV. Quick checkup remains one summary without CSV exports.
-Use `--rule NAME --action csv --include_field FIELD` for a separate rule export.
-Keep supporting Markdown and CSV files with the report when moving or sharing it.
+See [Automatic Field Name and Type Matching](#automatic-field-name-and-type-matching)
+for the field name to rules matching table.
 
 ## Basic Usage
 
@@ -465,7 +391,7 @@ Run without arguments to display detailed usage and the command roadmap:
 bin/dq
 ```
 
-Select a rule/action pair, a special report, or a utility command:
+Select a rule, a special report, or a utility command:
 
 ```sh
 bin/dq --list_fields --main_url URL --collection NAME
@@ -473,7 +399,7 @@ bin/dq --list_fields
 bin/dq --list_reports
 bin/dq --list_rules
 bin/dq --report NAME [NAME ...]
-bin/dq --rule NAME [NAME ...] --action csv
+bin/dq --rule NAME [NAME ...]
 bin/dq --write_config
 bin/dq --config_wizard
 bin/dq --help
@@ -482,7 +408,7 @@ bin/dq --version
 
 The later commands assume the remaining parameters are read from `dq.ini`.
 
-Choose a rule/action pair, a special report, or a utility command. Add target and field-filter options as needed.
+Rule commands default to the CSV action. Reports and rules cannot be combined in one run. Add field-filter options as needed.
 
 Select a Markdown report by name:
 
@@ -493,7 +419,7 @@ bin/dq --report quick_checkup
 ``--report`` and ``--reports`` are synonyms.
 
 See [Rules, Reports and Actions](#rules-reports-and-actions) for the complete report and CSV
-reference. Deferred work is listed under [Post-MVP TODO](#post-mvp-todo).
+reference.
 
 ### Run a Report
 
@@ -515,50 +441,50 @@ bin/dq --list_fields
 To export documents without a value for one stored field:
 
 ```sh
-bin/dq --rule missing_fields --action csv --include_field email_t
+bin/dq --rule missing_fields_base --include_field email_t
 ```
 
-This writes `reports/email_t_missing_fields.csv` automatically. Replace `email_t` with
+This writes `reports/email_t_missing_fields_base.csv` automatically. Replace `email_t` with
 your field name when using your own data. Field listing writes to standard output.
 See [Using HTTPS](#using-https) for certificates and authentication.
 
 ### Export Missing, Empty, or Whitespace Values
 
-The `missing_fields` rule exports documents without a stored field value:
+The `missing_fields_base` rule exports documents without a stored field value:
 
 ```sh
-bin/dq --rule missing_fields --action csv --include_field email_t
+bin/dq --rule missing_fields_base --include_field email_t
 ```
 
-This creates `reports/email_t_missing_fields.csv` with columns
+This creates `reports/email_t_missing_fields_base.csv` with columns
 `id,reason,value`. Missing values are reported as `missing or null`
 because Solr does not distinguish those cases after indexing.
 
 Use separate rules for zero-length and whitespace-only stored strings:
 
 ```sh
-bin/dq --rule empty_strings --action csv --include_field email_t
-bin/dq --rule whitespace_only --action csv --include_field email_t
+bin/dq --rule empty_strings_base --include_field email_t
+bin/dq --rule whitespace_only_base --include_field email_t
 ```
 
-`empty_strings` selects zero-length strings. `whitespace_only` requires at least
+`empty_strings_base` selects zero-length strings. `whitespace_only_base` requires at least
 one whitespace character, so the two rules do not overlap. Standard CSV quoting
 preserves spaces, tabs, and line breaks. Field announcements and progress dots
 go to stdout; configuration, export completion, and errors go to stderr.
 
-`missing_fields` always checks records through the normal cursor scan. When it
+`missing_fields_base` always checks records through the normal cursor scan. When it
 runs by itself, DQ requests an `exists(field)` Boolean for each selected field
 instead of transferring the stored values. With `--rows N`, it checks the first
-N source documents in unique-key order. When `missing_fields` is combined with
+N source documents in unique-key order. When `missing_fields_base` is combined with
 other rules, DQ fetches the values once in one shared record scan and applies
 every rule in command-line order:
 
 ```sh
-bin/dq --rules missing_fields whitespace_only --action csv --include_field notes_t
+bin/dq --rules missing_fields_base whitespace_only_base --include_field notes_t
 ```
 
 This reports a missing value first; a present value continues to the
-`whitespace_only` rule. As with other combined rules, only the first failed rule
+`whitespace_only_base` rule. As with other combined rules, only the first failed rule
 is exported for each value.
 
 Select one or more stored fields with `--include_field[s]` and `--exclude_field[s]`.
@@ -674,7 +600,7 @@ the results.
 Run `bin/dq --list_reports` to print this report catalog in the terminal.
 
 `--report` and `--reports` are synonyms and accept one or more report names.
-Selecting a report implies `--action report`.
+Selecting a report implies `--action report`. Selecting one or more rules defaults to `--action csv`; it may still be written explicitly.
 
 ### Performance: Full Checkup Scope Limits
 
@@ -706,24 +632,36 @@ Rules run on selected stored field values.
 
 | Rule                    | Type      | Description |
 | ----------------------- | --------- | ----------- |
-| `missing_fields`        | Base      | Field is missing or null. |
-| `empty_strings`         | Base      | Stored text value contains zero characters. |
-| `whitespace_only`       | Base      | Nonempty stored string contains only whitespace. |
-| `code_points`           | Base      | Stored text contains an unusual Unicode character. |
-| `email`                 | Base      | Email syntax checks. |
-| `us_phone`              | Base      | US phone-number syntax checks. |
-| `ssn`                   | Base      | SSN structure checks. |
-| `customer_code_example` | Base      | Example customer-code regex checks. |
-| `standard_text`         | Composite | Null, `empty_strings`, `whitespace_only`, surrounding-whitespace, and `code_points` checks. |
+| `missing_fields_base`        | Base      | Field is missing or null. |
+| `empty_strings_base`         | Base      | Stored text value contains zero characters. |
+| `whitespace_only_base`       | Base      | Nonempty stored string contains only whitespace. |
+| `surrounding_whitespace_base`| Base      | Stored string has leading or trailing whitespace. |
+| `code_points_base`           | Base      | Stored text contains an unusual Unicode character. |
+| `email_base`            | Base      | Email syntax only. |
+| `us_phone_base`         | Base      | US phone-number syntax only. |
+| `ssn_base`              | Base      | SSN structure only. |
+| `part_number_example_base` | Base | Example part-number regex checks. |
+| `standard_text_composite` | Predefined Composite | Missing, empty, whitespace, and `code_points_base` checks. |
+| `email_composite`       | Predefined Composite | `standard_text_composite`, then `email_base`. |
+| `us_phone_composite`    | Predefined Composite | `standard_text_composite`, then `us_phone_base`. |
+| `ssn_composite`         | Predefined Composite | `standard_text_composite`, then `ssn_base`. |
+| `part_number_example_composite` | Predefined Composite | `standard_text_composite`, then `part_number_example_base`. |
 
 Run `bin/dq --list_rules` to print the rule catalog, including each rule's
-Base or Composite type.
+Base or Predefined Composite type.
 
 Base rules are named building blocks that can run alone or be combined. A
-composite is either a predefined combination such as `standard_text` or a
+composite is either a predefined combination such as `email_composite` or a
 combination formed dynamically by supplying multiple names with `--rules`.
-Rules run in command-line order; each value must pass every rule, and DQ exports
-its first failure.
+Composites may contain other composites. DQ recursively flattens them to one
+ordered list of base rules, removes duplicates while preserving first occurrence,
+and evaluates each base rule at most once per value. DQ exports the first failure.
+
+A base format rule intentionally performs only its regex check. For example,
+`email_base` reports a regex failure for a value with trailing whitespace.
+`email_composite` reports the more specific `surrounding_whitespace_base` failure
+before it reaches `email_base`. A null also fails a base regex unless
+`--skip_null_values` is enabled; the composite reports `missing_fields_base` first.
 
 ### Actions
 
@@ -743,9 +681,9 @@ These examples assume the target is saved in `dq.ini`:
 
 ```sh
 bin/dq --report quick_checkup
-bin/dq --rule missing_fields --action csv --include_field email_t --rows 1000
-bin/dq --rule email --action csv --include_field email_t --rows 1000
-bin/dq --rules missing_fields whitespace_only --action csv --include_field notes_t
+bin/dq --rule missing_fields_base --include_field email_t --rows 1000
+bin/dq --rule email_composite --include_field email_t --rows 1000
+bin/dq --rules missing_fields_base whitespace_only_base --include_field notes_t
 ```
 
 Do not combine reports and rule exports in one invocation. Rule, report, and
@@ -757,7 +695,7 @@ action selections are command-line options and are not saved in `dq.ini`.
 | ------------------------------------ | ------------------------------------------------------------------- |
 | `--list_fields`                      | List fields, schema properties, and document counts on stdout.      |
 | `--list_reports`                     | List reports, status, and descriptions on stdout.                   |
-| `--list_rules`                       | List rules, Base/Composite type, and descriptions on stdout.        |
+| `--list_rules`                       | List rules, Base and Predefined Composite type, and descriptions.   |
 | `--config_wizard` / `--setup_wizard` | Walk through connection settings and save the INI file.             |
 | `--write_config`                     | Save effective settings to dq.ini or the file selected by --config. |
 | `--help` / `-h`                      | Display syntax, options, and the current report catalog.            |
@@ -1247,6 +1185,7 @@ DQ uses common terms across Solr, Elasticsearch, and OpenSearch:
 | **Collection**, **index** | The same concept: the named target dataset. Solr uses *collection*; Elasticsearch and OpenSearch use *index*. |
 | **Document ID**, **unique key** | The value that uniquely identifies a document. Solr schema metadata calls it the *unique key*. |
 | **Field** | A named value within a document. A field may be single-valued or multivalued, stored or indexed. |
+| **Regex** | Short for *regular expression*: a text pattern used to identify values that match a particular format. |
 | **Rows**, **size** | Synonyms for DQ's maximum number of documents to scan. The command-line options are `--rows` and `--size` and they are synonyms. |
 | **Rule** | A requirement applied to field values. When rules are stacked, a value must pass all of them. |
 | **Action** | What DQ does with rule results, such as writing CSV output. |
@@ -1263,7 +1202,7 @@ syntax. XML is also verbose and feels old-school for a small configuration file.
 INI lets DQ retain its no-runtime-dependencies design and older Python support.
 
 Regex patterns live separately in plain-text `.regex` files, preserving readable
-extended syntax without configuration-file escaping. Processor INI files contain
+extended syntax without configuration-file escaping. Rule INI files contain
 the settings and references; relative regex paths resolve against their INI file.
 
 ### What Does an Underscore in a Number Mean?
@@ -1285,14 +1224,14 @@ repeated underscores are rejected.
 Not after ordinary indexing. If a source document omits a field, Solr stores no
 value for it. If the source submits that field as null, Solr also stores no value
 and normally omits the field from query responses. Setting a field to null in an
-atomic update removes its values. Therefore, `missing_fields` reports **not
+atomic update removes its values. Therefore, `missing_fields_base` reports **not
 submitted or null**; it cannot determine which source condition occurred.
 
 Applications that need that distinction must record it while ingesting data,
 for example with a companion Boolean field such as `email_was_null_b`, a chosen
 sentinel value, or a retained copy of the original source document.
 
-## Developers
+## Development and Custom Rules
 
 ### Requirements and Dependencies
 
@@ -1302,31 +1241,100 @@ Required software:
 
 Dependencies: No runtime or development dependencies; DQ uses only the Python standard library.
 
-### Python Compatibility
+### Internal Rule and Report Modules
 
-Run DQ directly from the source checkout with `bin/dq`, as shown in Quickstart.
-No installation or virtual environment is required.
+Rules live under `src/dq/rules/`. Built-in Markdown reports and their shared
+formatting live under `src/dq/reports/`. These report packages are part of DQ
+itself. The MVP does not support user-defined custom reports or load report code
+from outside the source tree. See
+[Internal Rules and Reports](docs/report-modules.md) for the package layout and
+handler interfaces used by DQ development.
 
-Python 3.4.10 is the tested compatibility baseline. Python 3.0 through 3.3 are
-not claimed as supported. See [Python compatibility notes](docs/python-compatibility.md)
-for developer testing and implementation details.
+### Custom Rules
 
-### Internal Processor Modules
+Custom rules are defined under `src/dq/rules/`. Every public rule
+gets its own package directory. Base-rule directory names end in `_base`, and
+predefined composite-rule directory names end in `_composite`. A regex base rule
+keeps its settings in `rule.ini` and its extended regular expression in a
+separate `.regex` file.
 
-Checks, discovery, and CSV findings live under `src/dq/processors/`.
-Markdown report generation and shared formatting live under
-`src/dq/reports/`. Each package declares its name, description, and supported
-handlers; DQ discovers those packages and loads a handler when selected. Shared
-code handles command-line parsing, settings, Markdown formatting, and streaming
-output. See [Adding internal reports](docs/report-modules.md) for the directory
-layout and handler interfaces.
+The bundled part-number example demonstrates both rule types.
 
-### Post-MVP TODO
+#### Custom Regex Rule Example
 
-These features are deliberately outside the MVP:
+`part_number_example_base` is a regex base rule that matches three letters, a
+dash, and six digits, such as `ABC-123456`. Its options are explained in the
+comments in `dq/src/dq/rules/part_number_example_base/rule.ini`.
 
-- Indexed-term analysis (`term_stats`)
-- Date analysis and distribution graphs (`date_checker`)
+| File | Purpose |
+| ---- | ------- |
+| `__init__.py` | Marks the directory as a Python rule package. |
+| `rule.ini` | Configures the directory-named rule and its numbered `[regex:regex01]` check. |
+| `part_number_example.regex` | Contains the extended regular expression for the part-number format. |
+
+Run the base rule when only that format check is wanted:
+
+```sh
+bin/dq --rule part_number_example_base --include_field part_number_t --rows 1_000
+```
+
+To keep missing or null fields out of the CSV file, add
+`--skip_null_values true`:
+
+```sh
+bin/dq --rule part_number_example_base --include_field part_number_t --rows 1_000 --skip_null_values true
+```
+
+This reports only actual string values that do not match the part-number regex.
+Empty and whitespace-only strings are still strings, so this base rule reports
+them when they do not match.
+
+#### Custom Composite Rule Example
+
+`part_number_example_composite` is a predefined composite rule. It performs the
+same preliminary tests as `standard_text_composite`, then checks the value
+against a custom regular expression.
+
+| File | Purpose |
+| ---- | ------- |
+| `__init__.py` | Defines the composite metadata and its ordered `RULES` chain. |
+
+```python
+RULES = ('standard_text_composite', 'part_number_example_base')
+```
+
+DQ therefore reports standard text problems, such as missing values or
+surrounding whitespace, before applying the part-number format check:
+
+```sh
+bin/dq --rule part_number_example_composite --include_field part_number_t
+```
+
+### Automatic Field Name and Type Matching
+
+DQ identifies text/string fields from search-engine metadata rather than relying
+on `_t` or `_s` name suffixes. For Solr, it reads the schema field type and its
+underlying field-type class. For Elasticsearch and OpenSearch, it reads the index
+mapping and recognizes string types such as `text` and `keyword`.
+
+Most text/string fields receive `standard_text_composite`, unless the field name
+implies a special type such as an email address, phone number, or Social Security
+number. DQ applies the corresponding specialized composite rule to those fields.
+A matching name on a numeric, date, Boolean, or vector field does not trigger a
+text or Regex rule. Currently, this automatic selection is not easy to override.
+
+DQ converts field names to lowercase components, splitting at punctuation,
+underscores, and camel-case boundaries:
+
+| Inferred rule | Matching field-name components | Examples |
+| ------------- | ------------------------------ | -------- |
+| `email_composite` | `email` or `mail` | `email_t`, `primaryEmail`, `mail_address_s` |
+| `us_phone_composite` | `phone`, `mobile`, `telephone`, or `tel` | `phone_t`, `mobileNumber`, `home_tel_s` |
+| `ssn_composite` | `ssn`, or both `social` and `security` | `ssn_t`, `customerSSN`, `social_security_number_s` |
+
+Matching uses whole components, so `microphone_s` does not trigger
+`us_phone_composite`. Schema suffixes such as `_s` and `_t` do not affect the
+match. Generated reports label name-based selections as inferred.
 
 ## License and Copyright
 

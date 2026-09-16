@@ -4,7 +4,7 @@ import re
 import unittest
 from unittest.mock import patch
 from dq.progress import Progress
-from dq.processors._checkup.processor import scan
+from dq.reports._checkup.processor import scan
 
 
 class ProgressTests(unittest.TestCase):
@@ -30,7 +30,7 @@ class ProgressTests(unittest.TestCase):
             yield 'private-id', 'email_s', 'private-value'
             progress('scanned', 1)
         with patch('sys.stdout', out), patch('dq.stored.values', side_effect=source):
-            scan('url', [{'name': 'email_s'}], {'email_s': {'email': 'inferred'}},
+            scan('url', [{'name': 'email_s'}], {'email_s': {'email_composite': 'inferred'}},
                  progress=Progress('checkup', interval=0), total=1)
         text = out.getvalue()
         self.assertIn('fetching next Solr page', text)
@@ -86,7 +86,7 @@ class ScanProgressTests(unittest.TestCase):
     def test_each_scan_starts_its_own_timer_and_keeps_its_unit(self):
         from dq.progress import ScanProgress
         out = FlushingStream()
-        progress = ScanProgress('missing_fields', stream=out)
+        progress = ScanProgress('missing_fields_base', stream=out)
         with patch('dq.progress.time.monotonic', side_effect=[100, 102, 200, 204]) as clock:
             for _ in range(2):
                 progress.start(['embedding'], unit='missing documents')
@@ -183,11 +183,11 @@ class ScanProgressTests(unittest.TestCase):
                     patch('dq.stored.fields', return_value=[{'name': 'email_t', 'type': 'text_general'}]), \
                     patch('dq.stored.get_json', side_effect=responses), \
                     patch('sys.stdout', out), patch('sys.stderr', err):
-                self.assertEqual(main(['--rule', 'email', '--action', 'csv', '--rows', '5', '--progress_every', '2']), 0)
-            with open(os.path.join(directory, 'email_t_email.csv'), newline='') as stream:
+                self.assertEqual(main(['--rule', 'email_composite', '--action', 'csv', '--rows', '5', '--progress_every', '2']), 0)
+            with open(os.path.join(directory, 'email_t_email_composite.csv'), newline='') as stream:
                 self.assertEqual(list(csv.reader(stream)), [['id', 'reason', 'value']])
         self.assertEqual(dot_count(out.getvalue()), 2)
-        self.assertIn('Field: email_t; rules: email', out.getvalue())
+        self.assertIn('Field: email_t; rules: email_composite', out.getvalue())
         self.assertIn('Documents checked: 5', out.getvalue())
         self.assertNotIn('person@example.com', out.getvalue())
         self.assertIn('Offending records exported: 0', err.getvalue())
@@ -195,7 +195,7 @@ class ScanProgressTests(unittest.TestCase):
     def test_full_checkup_shares_scan_and_does_not_interrupt_dots(self):
         from dq.progress import ScanProgress
         fields = [{'name': 'email_t'}, {'name': 'notes_t'}]
-        plans = {'email_t': {'standard_text': '', 'email': ''}, 'notes_t': {'standard_text': ''}}
+        plans = {'email_t': {'email_composite': ''}, 'notes_t': {'standard_text_composite': ''}}
         docs = [{'dq_key': str(i), 'dq_value0': 'person@example.com', 'dq_value1': 'notes'} for i in range(3)]
         responses = [{'uniqueKey': 'id'}, {'response': {'docs': docs}, 'nextCursorMark': 'one'}]
         out = FlushingStream()
@@ -203,14 +203,14 @@ class ScanProgressTests(unittest.TestCase):
             scan('url', fields, plans, progress=Progress('full_checkup', interval=0),
                  row_limit=3, scan_progress=ScanProgress('full_checkup', 1, out))
         self.assertEqual(fetch.call_count, 2)
-        self.assertIn('Field: email_t; rules: standard_text, email', out.getvalue())
-        self.assertIn('Field: notes_t; rules: standard_text', out.getvalue())
+        self.assertIn('Field: email_t; rules: empty_strings_base, whitespace_only_base, surrounding_whitespace_base, code_points_base, email_base', out.getvalue())
+        self.assertIn('Field: notes_t; rules: empty_strings_base, whitespace_only_base, surrounding_whitespace_base, code_points_base', out.getvalue())
         self.assertIn('... Documents checked: 3 across 2 fields in ', out.getvalue())
         self.assertNotIn('fetching next Solr page', out.getvalue())
 
-    def test_unlimited_missing_fields_uses_record_progress(self):
+    def test_unlimited_missing_fields_base_uses_record_progress(self):
         from dq.progress import ScanProgress
-        from dq.processors.missing_fields.processor import prepare_csv
+        from dq.rules.missing_fields_base.processor import prepare_csv
         out = FlushingStream()
         field = {'name': 'embedding', 'stored': True, 'typeClass': 'solr.DenseVectorField'}
         responses = [
@@ -221,12 +221,12 @@ class ScanProgressTests(unittest.TestCase):
             ]}, 'nextCursorMark': 'one'},
             {'response': {'docs': []}, 'nextCursorMark': 'one'},
         ]
-        with patch('dq.processors.missing_fields.processor.list_fields', return_value=[field]), \
+        with patch('dq.rules.missing_fields_base.processor.list_fields', return_value=[field]), \
                 patch('dq.stored.get_json', side_effect=responses), \
                 patch('sys.stderr', io.StringIO()):
-            header, pages = prepare_csv('url', scan_progress=ScanProgress('missing_fields', 1, out))
+            header, pages = prepare_csv('url', scan_progress=ScanProgress('missing_fields_base', 1, out))
             self.assertEqual(sum(len(page) for page in pages), 2)
-        self.assertIn('Field: embedding; rules: missing_fields', out.getvalue())
+        self.assertIn('Field: embedding; rules: missing_fields_base', out.getvalue())
         self.assertIn('Documents checked: 2', out.getvalue())
         self.assertEqual(dot_count(out.getvalue()), 2)
 

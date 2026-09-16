@@ -35,7 +35,7 @@ class SavedFilterTests(unittest.TestCase):
     def test_report_uses_saved_filters_and_reports_their_source(self):
         with tempfile.TemporaryDirectory() as directory:
             path = self.config_file(directory)
-            with patch('dq.reports.quick_checkup.write_report') as report, patch('sys.stdout', io.StringIO()):
+            with patch('dq.reports.quick_checkup.report.write_report') as report, patch('sys.stdout', io.StringIO()):
                 self.assertEqual(main(['--config', path, '--report', 'quick_checkup']), 0)
             self.assertEqual(report.call_args[1]['include'], ['file_*', 'title[ab,]_s'])
             self.assertEqual(report.call_args[1]['exclude'], ['*_vector'])
@@ -70,11 +70,11 @@ class SavedFilterTests(unittest.TestCase):
                 main(['--config', path, '--write_config', '--include_field', 'name_s'])
             self.assertEqual(load_config(path).include_fields, ['name_s'])
             fields = [{'name': 'name_s', 'stored': True}, {'name': 'other_s', 'stored': True}]
-            with patch('dq.processors.missing_fields.processor.list_fields', return_value=fields), \
+            with patch('dq.rules.missing_fields_base.processor.list_fields', return_value=fields), \
                  patch('dq.stored.values', return_value=iter([('one', 'name_s', False)])) as pages, \
                  patch('sys.stdout', io.StringIO()) as stdout, patch('sys.stderr', io.StringIO()):
-                main(['--config', path, '--rule', 'missing_fields', '--action', 'csv', '--rows', '1', '--reports_dir', directory])
-                self.assertIn('name_s_missing_fields.csv', stdout.getvalue())
-                with open(os.path.join(directory, 'name_s_missing_fields.csv'), newline='') as stream:
-                    self.assertEqual(stream.read(), 'id,reason,value\r\none,missing_fields: missing or null,\r\n')
+                main(['--config', path, '--rule', 'missing_fields_base', '--action', 'csv', '--rows', '1', '--reports_dir', directory])
+                self.assertIn('name_s_missing_fields_base.csv', stdout.getvalue())
+                with open(os.path.join(directory, 'name_s_missing_fields_base.csv'), newline='') as stream:
+                    self.assertEqual(stream.read(), 'id,reason,value\r\none,missing_fields_base: missing or null,\r\n')
                 self.assertEqual(pages.call_args[0][1][0]['name'], 'name_s')

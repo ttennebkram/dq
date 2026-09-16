@@ -24,8 +24,8 @@ class FieldOutputTests(unittest.TestCase):
 
     def test_progress_names_field_before_processor(self):
         out = io.StringIO()
-        ScanProgress('standard_text', stream=out).start(['abs_path_t'])
-        self.assertTrue(out.getvalue().startswith('Field: abs_path_t; rules: standard_text\n'))
+        ScanProgress('standard_text_composite', stream=out).start(['abs_path_t'])
+        self.assertTrue(out.getvalue().startswith('Field: abs_path_t; rules: standard_text_composite\n'))
 
     def test_csv_one_pass_routes_multivalues_and_keeps_empty_files(self):
         response = {'response': {'docs': [
@@ -37,23 +37,23 @@ class FieldOutputTests(unittest.TestCase):
                 patch('dq.stored.list_fields', return_value=FIELDS), \
                 patch('dq.stored.get_json', side_effect=[{'uniqueKey': 'id'}, response]) as fetch, \
                 patch('sys.stdout', io.StringIO()) as out, patch('sys.stderr', io.StringIO()) as err:
-            self.assertEqual(main(['--rule', 'standard_text', '--action', 'csv', '--include_fields', '*t', '--rows', '2']), 0)
+            self.assertEqual(main(['--rule', 'standard_text_composite', '--action', 'csv', '--include_fields', '*t', '--rows', '2']), 0)
             self.assertEqual(fetch.call_count, 2)  # One schema lookup and one shared data page.
             self.assertIn('dq_value0:Email_t,dq_value1:notes-t,dq_value2:clean_t', fetch.call_args[1]['fl'])
             files = sorted(os.listdir(os.path.join(root, 'reports')))
-            self.assertEqual(files, ['Email_t_standard_text.csv', 'clean_t_standard_text.csv', 'notes-t_standard_text.csv', 'processing-stats.jsonl'])
+            self.assertEqual(files, ['Email_t_standard_text_composite.csv', 'clean_t_standard_text_composite.csv', 'notes-t_standard_text_composite.csv', 'processing-stats.jsonl'])
             def rows(name):
-                with open(os.path.join(root, 'reports', name + '_standard_text.csv'), encoding='utf-8', newline='') as stream:
+                with open(os.path.join(root, 'reports', name + '_standard_text_composite.csv'), encoding='utf-8', newline='') as stream:
                     return list(csv.reader(stream))
             email = rows('Email_t')
             self.assertEqual(len(email), 3)  # Header, null, first failure (surrounding whitespace).
-            self.assertEqual(email[1], ['001', 'standard_text: Email_t: empty_values: null', ''])
+            self.assertEqual(email[1], ['001', 'missing_fields_base: missing or null', ''])
             self.assertTrue(all(len(row) == 3 for row in email))
             self.assertEqual([row[2] for row in rows('notes-t')[1:]], [' ', ''])
             self.assertEqual(rows('clean_t'), [['id', 'reason', 'value']])
             listed = out.getvalue().split('Files created:\n')[1].splitlines()
             expected_counts = {'Email_t': 2, 'notes-t': 2, 'clean_t': 0}
-            expected = ['  reports/{0}_standard_text.csv ({1} data records; header not counted)'.format(
+            expected = ['  reports/{0}_standard_text_composite.csv ({1} data records; header not counted)'.format(
                         f['name'], expected_counts[f['name']]) for f in FIELDS]
             self.assertEqual(listed, expected + ['  reports/processing-stats.jsonl'])
             self.assertNotIn(root, out.getvalue())
@@ -81,32 +81,32 @@ class FieldOutputTests(unittest.TestCase):
             with tempfile.TemporaryDirectory() as root:
                 destination = os.path.join(root, 'reports')
                 os.mkdir(destination)
-                path = os.path.join(destination, field_filename(names[0], 'standard_text', 'csv'))
+                path = os.path.join(destination, field_filename(names[0], 'standard_text_composite', 'csv'))
                 with open(path, 'w') as stream:
                     stream.write('previous output')
                 with patch('dq.actions.load_config', return_value=DqConfig(main_url='http://solr/c')), \
                         patch('dq.stored.fields', return_value=[{'name': n, 'type': 'string'} for n in names]), \
                         patch('dq.stored.values') as scan, patch('sys.stderr', io.StringIO()) as err, \
                         self.assertRaises(SystemExit) as result:
-                    main(['--rule', 'standard_text', '--action', 'csv', '--reports_dir', destination])
+                    main(['--rule', 'standard_text_composite', '--action', 'csv', '--reports_dir', destination])
                 self.assertEqual(result.exception.code, 2)
                 self.assertFalse(scan.called)
                 self.assertIn('filenames collide', err.getvalue())
                 with open(path) as stream:
                     self.assertEqual(stream.read(), 'previous output')
 
-    def test_missing_fields_multi_field_scan_and_three_columns(self):
+    def test_missing_fields_base_multi_field_scan_and_three_columns(self):
         fields = [{'name': 'a', 'stored': True}, {'name': 'b', 'stored': True}]
         with tempfile.TemporaryDirectory() as root, patch('os.getcwd', return_value=root), \
                 patch('dq.actions.load_config', return_value=DqConfig(main_url='http://solr/c')), \
-                patch('dq.processors.missing_fields.processor.list_fields', return_value=fields), \
+                patch('dq.rules.missing_fields_base.processor.list_fields', return_value=fields), \
                 patch('dq.stored.values', return_value=iter([('1', 'a', False), ('1', 'b', False), ('2', 'a', True)])) as scan, \
                 patch('sys.stdout', io.StringIO()), patch('sys.stderr', io.StringIO()):
-            self.assertEqual(main(['--rule', 'missing_fields', '--action', 'csv', '--skip_null_values', '--rows', '2']), 0)
+            self.assertEqual(main(['--rule', 'missing_fields_base', '--action', 'csv', '--skip_null_values', '--rows', '2']), 0)
             self.assertEqual(scan.call_count, 1)
             self.assertEqual(scan.call_args[0][1], fields)
             for name in ('a', 'b'):
-                with open(os.path.join(root, 'reports', name + '_missing_fields.csv'), newline='') as stream:
+                with open(os.path.join(root, 'reports', name + '_missing_fields_base.csv'), newline='') as stream:
                     rows = list(csv.reader(stream))
                 self.assertEqual(rows[0], ['id', 'reason', 'value'])
                 self.assertEqual([row[2] for row in rows[1:]], [''])

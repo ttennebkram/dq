@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 from dq.main import main
 from dq.findings import CsvExport
-from dq.processors import ReportError
+from dq.errors import ReportError
 from dq.config import DqConfig, load_config, write_config
 from dq.settings import reports_directory
 
@@ -43,13 +43,13 @@ class OutputFileTests(unittest.TestCase):
 
     def test_csv_default_creates_directory_and_preserves_utf8_csv(self):
         with tempfile.TemporaryDirectory() as root:
-            path = os.path.join(root, 'reports', 'email_t_email.csv')
+            path = os.path.join(root, 'reports', 'email_t_email_composite.csv')
             with patch('os.getcwd', return_value=root), \
                     patch('dq.actions.load_config', return_value=DqConfig(main_url='http://solr/c')), \
                     patch('dq.actions.load_handler', return_value=self.csv_export), \
                     patch('sys.stdout', io.StringIO()) as out, patch('sys.stderr', io.StringIO()) as err:
-                self.assertEqual(main(['--rule', 'email', '--action', 'csv']), 0)
-                self.assertEqual(out.getvalue(), '\nFiles created:\n  reports/email_t_email.csv (1 data record; header not counted)\n')
+                self.assertEqual(main(['--rule', 'email_composite', '--action', 'csv']), 0)
+                self.assertEqual(out.getvalue(), '\nFiles created:\n  reports/email_t_email_composite.csv (1 data record; header not counted)\n')
                 self.assertIn('Created reports directory: reports', err.getvalue())
                 self.assertNotIn(root, out.getvalue())
                 with open(path, encoding='utf-8', newline='') as stream:
@@ -59,13 +59,13 @@ class OutputFileTests(unittest.TestCase):
                     self.assertNotIn(b'\r\r\n', stream.read())
                 # A rerun replaces the CSV, preserves the corresponding Markdown,
                 # and does not announce creation of an existing directory.
-                markdown = os.path.join(root, 'reports', 'email_t_email.md')
+                markdown = os.path.join(root, 'reports', 'email_t_email_composite.md')
                 with open(markdown, 'w') as stream:
                     stream.write('keep report')
                 err.seek(0)
                 err.truncate()
                 with patch('dq.actions.load_handler', return_value=lambda *a, **k: CsvExport([{'name': 'email_t'}], ['id', 'reason', 'value'], iter([]))):
-                    self.assertEqual(main(['--rule', 'email', '--action', 'csv']), 0)
+                    self.assertEqual(main(['--rule', 'email_composite', '--action', 'csv']), 0)
                 self.assertNotIn('Created reports directory:', err.getvalue())
                 with open(path, newline='') as stream:
                     self.assertEqual(stream.read(), 'id,reason,value\r\n')
@@ -83,8 +83,8 @@ class OutputFileTests(unittest.TestCase):
                         patch('dq.actions.load_config', return_value=config), \
                         patch('dq.actions.load_handler', return_value=self.csv_export), \
                         patch('sys.stdout', io.StringIO()), patch('sys.stderr', io.StringIO()) as err:
-                    self.assertEqual(main(['--rule', 'email', '--action', 'csv'] + arguments), 0)
-                self.assertTrue(os.path.isfile(os.path.join(expected, 'email_t_email.csv')))
+                    self.assertEqual(main(['--rule', 'email_composite', '--action', 'csv'] + arguments), 0)
+                self.assertTrue(os.path.isfile(os.path.join(expected, 'email_t_email_composite.csv')))
                 self.assertIn('Created reports directory: ' + os.path.relpath(expected, root), err.getvalue())
 
     def test_markdown_creates_directory_once_and_uses_report_name(self):
@@ -97,8 +97,8 @@ class OutputFileTests(unittest.TestCase):
                     patch('dq.actions.load_handler', return_value=write_report), \
                     patch('sys.stdout', io.StringIO()) as out:
                 for _ in range(2):
-                    self.assertEqual(main(['--report', 'email', '--reports_dir', directory]), 0)
-            self.assertTrue(os.path.isfile(os.path.join(directory, 'email.md')))
+                    self.assertEqual(main(['--report', 'email_composite', '--reports_dir', directory]), 0)
+            self.assertTrue(os.path.isfile(os.path.join(directory, 'email_composite.md')))
             self.assertEqual(out.getvalue().count('Created reports directory: '), 1)
 
     def test_csv_directory_error_fails_before_document_scan(self):
@@ -113,7 +113,7 @@ class OutputFileTests(unittest.TestCase):
             with patch('dq.actions.load_config', return_value=DqConfig(main_url='http://solr/c')), \
                     patch('dq.actions.load_handler', return_value=lambda *a, **k: CsvExport([{'name': 'email_t'}], ['id'], pages())), \
                     patch('sys.stderr', io.StringIO()) as err, self.assertRaises(SystemExit) as error:
-                main(['--rule', 'email', '--action', 'csv', '--reports_dir', os.path.join(blocked, 'reports')])
+                main(['--rule', 'email_composite', '--action', 'csv', '--reports_dir', os.path.join(blocked, 'reports')])
             self.assertEqual(error.exception.code, 2)
             self.assertEqual(scanned, [])
             self.assertIn('export incomplete (0 CSV records written)', err.getvalue())
@@ -124,6 +124,6 @@ class OutputFileTests(unittest.TestCase):
             with patch('dq.actions.load_config', return_value=DqConfig(main_url='http://solr/c')), \
                     patch('dq.actions.load_handler', return_value=lambda *a, **k: (_ for _ in ()).throw(ReportError('invalid field'))), \
                     patch('sys.stderr', io.StringIO()), self.assertRaises(SystemExit) as error:
-                main(['--rule', 'email', '--action', 'csv', '--reports_dir', directory])
+                main(['--rule', 'email_composite', '--action', 'csv', '--reports_dir', directory])
             self.assertEqual(error.exception.code, 2)
             self.assertFalse(os.path.exists(directory))
