@@ -1,6 +1,6 @@
 """Standard-output field listing."""
 from dq.field_selection import select_fields
-from dq.search import list_fields, engine_name
+from dq.search import list_fields, list_collections, engine_name
 from dq.limits import PRESENCE_SCOPE
 from dq.registry import report_catalog, rule_catalog
 
@@ -34,6 +34,22 @@ def print_rules():
     rows = [(name, rule_type.title(), description)
             for name, rule_type, description in rule_catalog()]
     _print_catalog('Rules', ('RULE', 'TYPE', 'DESCRIPTION'), rows)
+
+
+def print_collections(target, noun='collections', configuration_path=None,
+                      configuration_explicit=False, connection=None):
+    names = list_collections(target, connection=connection)
+    print('{0} server: {1}'.format(engine_name(target), target.rstrip('/')))
+    if configuration_path is not None:
+        source = 'specified by --config' if configuration_explicit else 'default configuration'
+        print('Configuration: {0} ({1})'.format(configuration_path, source))
+    print('{0}: {1}'.format(noun.title(), len(names)))
+    print()
+    heading = 'COLLECTION' if noun == 'collections' else 'INDEX'
+    print(heading)
+    print('-' * len(heading))
+    for name in names:
+        print(name)
 
 
 def print_fields(target, *, include=(), exclude=(), configuration_path=None,

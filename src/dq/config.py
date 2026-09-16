@@ -3,7 +3,7 @@ import configparser
 import os
 from dq.files import absolute_path, write_text
 from dq.limits import row_limit, progress_interval, boolean_option
-from urllib.parse import quote, unquote, urlsplit
+from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
 
 class ConfigError(ValueError):
@@ -124,6 +124,35 @@ def collection_url(config, *, main_url=None, collection=None):
             'collection is not present in main_url; use --collection, DQ_COLLECTION, or a dq.ini file')
     collection_path = quote(resolved_collection.strip('/'), safe='')
     return '{0}/{1}'.format(normalized_url, collection_path)
+
+
+def catalog_url(config, *, main_url=None):
+    """Resolve the server URL used to list collections or indexes.
+
+    A configured URL may already end in a Solr collection or an
+    Elasticsearch/OpenSearch index. Catalog APIs live above that final target.
+    """
+    resolved_main_url = main_url or config.main_url
+    if not resolved_main_url:
+        raise ConfigError('main_url is required; use --main_url, DQ_MAIN_URL, or a dq.ini file')
+    parsed = urlsplit(resolved_main_url.rstrip('/'))
+    if parsed.scheme not in ('http', 'https') or not parsed.hostname:
+        raise ConfigError('main_url must be an HTTP or HTTPS URL with a hostname')
+    if parsed.username is not None or parsed.password is not None:
+        raise ConfigError('use username/password settings instead of credentials in main_url')
+
+    raw_parts = [part for part in parsed.path.split('/') if part]
+    decoded_parts = [unquote(part) for part in raw_parts]
+    solr_positions = [index for index, part in enumerate(decoded_parts)
+                      if part.lower() == 'solr']
+    if solr_positions:
+        # Preserve the path through /solr and remove the collection after it.
+        raw_parts = raw_parts[:solr_positions[-1] + 1]
+    elif raw_parts:
+        # Elasticsearch and OpenSearch place the index directly below the base URL.
+        raw_parts = raw_parts[:-1]
+    path = '/' + '/'.join(raw_parts) if raw_parts else ''
+    return urlunsplit((parsed.scheme, parsed.netloc, path, '', ''))
 
 
 def main_url_has_collection(main_url):

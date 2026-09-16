@@ -7,14 +7,29 @@ import random
 import sys
 
 FIELDS = ['first_name_t', 'last_name_t', 'street_address_t', 'city_t', 'state_t',
-          'postal_code_t', 'country_t', 'email_t', 'phone_t', 'ssn_t', 'event_date_dt', 'notes_t']
+          'postal_code_t', 'country_t', 'email_t', 'phone_t', 'ssn_t',
+          'part_number_s', 'event_date_dt', 'notes_t']
 
 
 def valid_values(index):
     return dict(zip(FIELDS, ['DemoName{0}'.format(index), 'ExampleFamily',
         '{0} Example Street'.format(index), 'Example City', 'CA', '90001', 'US',
         'demo{0}@example.com'.format(index), '212-555-{0:04d}'.format(100 + index % 100),
-        '123-45-{0:04d}'.format(1000 + index % 9000), '2024-01-15T00:00:00Z', 'Synthetic example text']))
+        '123-45-{0:04d}'.format(1000 + index % 9000),
+        'PRT-{0:06d}'.format(index % 1000000),
+        '2024-01-15T00:00:00Z', 'Synthetic example text']))
+
+
+def malformed_value(field, index, sequence):
+    values = {
+        'email_t': ['not-an-email'],
+        'phone_t': ['123'],
+        'ssn_t': ['000-12-3456'],
+        'part_number_s': ['PRT123456', 'P1T-123456', 'PRT-12345', 'PRT-123456-X'],
+        'event_date_dt': ['2999-01-01T00:00:00Z'],
+        'notes_t': ['Replacement character: \ufffd'],
+    }.get(field, ['???\ufffd'])
+    return values[(index + sequence) % len(values)]
 
 
 def generate(count, incorrect_percent=20.0, seed=None):
@@ -30,8 +45,6 @@ def generate(count, incorrect_percent=20.0, seed=None):
     findings = []
     summary = {}
     kinds = ['missing', 'null', 'empty string', 'whitespace only', 'malformed']
-    malformed = {'email_t':'not-an-email', 'phone_t':'123', 'ssn_t':'000-12-3456',
-                 'event_date_dt':'2999-01-01T00:00:00Z', 'notes_t':'Replacement character: \ufffd'}
     for field in FIELDS:
         number = int(count * percentages[field] / 100.0 + 0.5)
         chosen = rng.sample(range(count), number)
@@ -46,7 +59,7 @@ def generate(count, incorrect_percent=20.0, seed=None):
             else:
                 doc[field] = {'null':None, 'empty string':'', 'whitespace only':' \t\n',
                               'future date':'2999-01-01T00:00:00Z',
-                              'malformed':malformed.get(field, '???\ufffd')}[kind]
+                              'malformed':malformed_value(field, index, sequence)}[kind]
             findings.append({'id':doc['id'], 'field':field, 'kind':kind})
     return documents, {'synthetic':True, 'seed':seed, 'documents':count,
                        'fields':summary, 'injected_errors':findings}

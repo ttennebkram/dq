@@ -20,7 +20,8 @@ The wizard uses command-line settings first, then existing values in the
 destination file. It does not inherit environment variables or other discovered
 config files. For a new file, the suggested URL is `http://localhost:8983/solr` and the
 collection is `dq-demo`, matching the test-data loader. The URL prompt also
-shows `http://localhost:9200` as an ES/OpenSearch example (default port 9200).
+shows separate Elasticsearch and OpenSearch examples. Both use
+`http://localhost:9200`, because both engines normally use HTTP port 9200.
 The Solr suggestions apply only when no CLI or saved value is available.
 Enter keeps a default; `-` clears an optional value. If the URL includes a
 collection, the wizard explains that the separate collection setting is omitted.
@@ -41,6 +42,29 @@ contacting the server, shows a summary, and asks before writing. Answer no, pres
 or end input to cancel without writing. It uses the same atomic, owner-only
 file writing as `--write_config` and comments out changed old target/filter values.
 Choose this action separately from reports, CSV export, listing, or `--write_config`.
+
+### Testing Elasticsearch and OpenSearch Side by Side
+
+Most users run only one of these engines, so both general examples use their
+normal address, `http://localhost:9200`. Developers testing DQ against both
+engines on one machine must assign a different HTTP port to one of them.
+
+For example, keep Elasticsearch on 9200 and add this to OpenSearch's
+`config/opensearch.yml` before restarting OpenSearch:
+
+```yaml
+http.port: 9201
+```
+
+The two test targets are then:
+
+```text
+Elasticsearch: http://localhost:9200
+OpenSearch:    http://localhost:9201
+```
+
+Use separate DQ configuration files when the engines use different credentials
+or index names, or select the server on the command line with `--main_url`.
 
 
 The project includes a template containing every currently supported setting:
@@ -278,7 +302,10 @@ can affect results because a checkup is not a snapshot.
 The quick report's workload estimate covers all selected fields together. Actual
 full-checkup time varies with field sizes, selected fields, server load, and
 network speed. Use `--include_fields` to focus the scan and `--rows` / `--size`
-to limit source documents during testing.
+to limit source documents during testing. Each timing line identifies its engine
+and uses only a benchmark recorded for that engine. If DQ has no benchmark for
+the current engine, the unavailable message names that engine instead of reusing
+another engine's timing range.
 
 ## Scan Progress
 
@@ -299,6 +326,8 @@ even when they produce no findings; multivalued items do not inflate the count.
 Multiple fields in a shared scan are announced together. This does not affect
 page size or the document limit. Unlimited vector-null exports count returned
 missing documents and identify that unit. Presence-only reports do not scan.
+Each new `processing-stats.jsonl` record includes the engine so Solr measurements
+remain distinct from Elasticsearch/OpenSearch measurements.
 
 ## Report directory
 

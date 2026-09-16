@@ -27,3 +27,7 @@ expected-results.json
 
 # Shared Elasticsearch/OpenSearch bulk payload.
 documents-es.ndjson
+
+# Local planning and machine-specific search-engine setup notes.
+/docs/mvp-video.md
+/docs/local-search-engines.md

@@ -85,6 +85,16 @@ def collection_document_count(collection_url, connection=None):
     return count
 
 
+def list_collections(solr_url, connection=None):
+    """Return collection names from Solr's Collections API."""
+    response = get_json(solr_url, 'admin/collections', connection=connection,
+                        action='LIST', wt='json')
+    collections = response.get('collections') if isinstance(response, dict) else None
+    if not isinstance(collections, list) or not all(isinstance(name, str) for name in collections):
+        raise SolrError('Solr Collections API response did not contain a collections list')
+    return sorted(collections)
+
+
 def list_fields(collection_url, *, include_counts=True, connection=None):
     """Return concrete index fields enriched with their schema properties."""
     schema_response = get_json(collection_url, 'schema/fields', connection=connection,

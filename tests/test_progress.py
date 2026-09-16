@@ -206,6 +206,7 @@ class ScanProgressTests(unittest.TestCase):
         self.assertIn('Field: email_t; rules: empty_strings_base, whitespace_only_base, surrounding_whitespace_base, code_points_base, email_base', out.getvalue())
         self.assertIn('Field: notes_t; rules: empty_strings_base, whitespace_only_base, surrounding_whitespace_base, code_points_base', out.getvalue())
         self.assertIn('... Documents checked: 3 across 2 fields in ', out.getvalue())
+        self.assertIn('stored-value scan complete: 3 documents; 6 stored values', out.getvalue())
         self.assertNotIn('fetching next Solr page', out.getvalue())
 
     def test_unlimited_missing_fields_base_uses_record_progress(self):

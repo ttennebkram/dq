@@ -186,7 +186,8 @@ def main(argv=None):
             response = request(connection,base,index_path+'/_bulk',method='POST',payload=payload,ndjson=True)
             check_bulk(response,count)
             written += count
-            print('Submitted {0:,} / {1:,} records'.format(written,total),flush=True)
+            if written == total or written % 50000 == 0:
+                print('Submitted {0:,} / {1:,} records'.format(written,total),flush=True)
         request(connection,base,index_path+'/_refresh',method='POST')
         count = request(connection,base,index_path+'/_count')['count']
         print('Complete: {0:,} records submitted; index contains {1:,} documents.'.format(written,count))

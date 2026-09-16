@@ -7,6 +7,7 @@ import re
 import subprocess
 import sys
 from urllib.parse import urlsplit, urlunsplit
+from dq.search import engine_name
 
 FILENAME = 'processing-stats.jsonl'
 _MACHINE = None
@@ -51,6 +52,7 @@ def save_scan_stats(directory, target, action, name, progress, row_limit, skip_n
     for measurement in progress.measurements:
         record = dict(measurement)
         record.update(source='dq', target=clean_target, action=action, name=name,
+                      engine=engine_name(target),
                       rows_limit=row_limit, skip_null_values=skip_null_values,
                       python_version=platform.python_version(), machine=machine_description())
         records.append(record)
@@ -61,10 +63,11 @@ def save_scan_stats(directory, target, action, name, progress, row_limit, skip_n
         return None
 
 
-def note_rate(directory, rate):
+def note_rate(directory, rate, engine):
     """Record a user-provided observation without inventing missing run details."""
     return append_records(directory, [{
         'source': 'user-reported',
+        'engine': engine,
         'machine': machine_description(),
         'recorded_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
         'records_per_second': rate,

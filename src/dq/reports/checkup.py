@@ -13,10 +13,22 @@ from dq.reports.markdown import _table, _code, _results_first
 from dq.reports.links import source_links
 
 
-# Manually maintained reference values used only for the quick-checkup estimate.
-FULL_CHECKUP_BENCHMARK_MACHINE = 'MacBook Pro M4'
-FULL_CHECKUP_RECORDS_PER_SECOND_LOW = 18000.0
-FULL_CHECKUP_RECORDS_PER_SECOND_HIGH = 25500.0
+# Manually maintained, engine-specific reference values used only for the
+# quick-checkup estimate. Do not apply one engine's measurements to another.
+FULL_CHECKUP_BENCHMARKS = {
+    'Solr': {
+        'machine': 'MacBook Pro M4',
+        'versions': 'Solr 9.10.1 and 10.0.0',
+        'records_per_second_low': 15300.0,
+        'records_per_second_high': 15800.0,
+    },
+    'Elasticsearch/OpenSearch': {
+        'machine': 'MacBook Pro M4',
+        'versions': 'Elasticsearch 9.5.3 and OpenSearch 3.8.0',
+        'records_per_second_low': 16700.0,
+        'records_per_second_high': 16800.0,
+    },
+}
 
 
 def write_report(target, output_path, *, include=(), exclude=(), connection=None,
@@ -118,7 +130,7 @@ def write_report(target, output_path, *, include=(), exclude=(), connection=None
     return [output_path] + list(paths.values()) + list(csv_paths.values())
 
 
-def _full_workload(selected, plans, total, row_limit=-1):
+def _full_workload(selected, plans, total, row_limit=-1, engine='Solr'):
     fields = [field for field in selected
               if set(expanded_checks(plans[field['name']])) - {'missing_fields_base'}]
     checks = {}
@@ -140,25 +152,35 @@ def _full_workload(selected, plans, total, row_limit=-1):
         return lines
     documents = total if row_limit == -1 else min(total, row_limit)
     batches = (documents + 999) // 1000
-    fastest_seconds = documents / FULL_CHECKUP_RECORDS_PER_SECOND_HIGH
-    slowest_seconds = documents / FULL_CHECKUP_RECORDS_PER_SECOND_LOW
-    if slowest_seconds < 1:
-        duration = '{0:.2f}-{1:.2f} seconds'.format(fastest_seconds, slowest_seconds)
-    elif slowest_seconds < 60:
-        duration = '{0:.1f}-{1:.1f} seconds'.format(fastest_seconds, slowest_seconds)
-    else:
-        duration = ('{0:.0f}-{1:.0f} seconds (approximately {2:.1f}-{3:.1f} minutes)'
-                    .format(fastest_seconds, slowest_seconds,
-                            fastest_seconds / 60.0, slowest_seconds / 60.0))
+    benchmark = FULL_CHECKUP_BENCHMARKS.get(engine)
     lines += ['- Documents to scan: {0:,}'.format(documents),
               '- Stored fields to fetch per document: {0:,} (plus the unique key)'.format(len(fields)),
               '- Data pages at 1,000 documents per page: approximately {0:,}'.format(batches),
-              '- Potential document/field pairs: {0:,}'.format(documents * len(fields)), '',
-              '- Estimated stored-value scan time: ' + duration,
-              '- Timing metric: {0:,.0f}-{1:,.0f} records/second on {2}'.format(
-                  FULL_CHECKUP_RECORDS_PER_SECOND_LOW,
-                  FULL_CHECKUP_RECORDS_PER_SECOND_HIGH,
-                  FULL_CHECKUP_BENCHMARK_MACHINE), '',
+              '- Potential document/field pairs: {0:,}'.format(documents * len(fields)), '']
+    if benchmark:
+        fastest_seconds = documents / benchmark['records_per_second_high']
+        slowest_seconds = documents / benchmark['records_per_second_low']
+        if slowest_seconds < 0.1:
+            duration = '{0:.3f}-{1:.3f} seconds'.format(fastest_seconds, slowest_seconds)
+        elif slowest_seconds < 1:
+            duration = '{0:.2f}-{1:.2f} seconds'.format(fastest_seconds, slowest_seconds)
+        elif slowest_seconds < 60:
+            duration = '{0:.1f}-{1:.1f} seconds'.format(fastest_seconds, slowest_seconds)
+        else:
+            fastest_minutes = '{0:.1f}'.format(fastest_seconds / 60.0)
+            slowest_minutes = '{0:.1f}'.format(slowest_seconds / 60.0)
+            minute_text = (fastest_minutes + ' minutes' if fastest_minutes == slowest_minutes
+                           else fastest_minutes + '-' + slowest_minutes + ' minutes')
+            duration = '{0:.0f}-{1:.0f} seconds (approximately {2})'.format(
+                fastest_seconds, slowest_seconds, minute_text)
+        lines += ['- Estimated stored-value scan time: ' + duration,
+                  '- Timing metric: {0:,.0f}-{1:,.0f} records/second using {2} on {3} (full_checkup measurements: {4})'.format(
+                      benchmark['records_per_second_low'],
+                      benchmark['records_per_second_high'], engine,
+                      benchmark['machine'], benchmark['versions'])]
+    else:
+        lines += ['- Estimated stored-value scan time: unavailable; no {0} benchmark is recorded yet.'.format(engine)]
+    lines += ['',
               'The full report uses one shared scan, not a separate scan for each test. '
               'Cursor paging can add a final request to detect completion; reaching the rows limit ends the scan immediately. Schema and presence queries are additional.',
               'Missing fields reduce returned values; multivalued fields can add many values. '
@@ -207,7 +229,8 @@ def _write_lite(target, output_path, selected, plans, total, missing, options,
               'email_composite, us_phone_composite, and ssn_composite for matching name components. Native date fields get presence checks only. '
               'Full checkup performs the text and regex validation listed above.', '']
     lines += _followup_examples(target, selected, plans, missing, configuration, explicit, row_limit)
-    lines += _full_workload(selected, plans, total, row_limit=row_limit) + ['']
+    lines += _full_workload(selected, plans, total, row_limit=row_limit,
+                            engine=engine_name(target)) + ['']
     write_text(output_path, '\n'.join(_results_first(lines)) + '\n')
 
 

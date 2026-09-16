@@ -88,9 +88,23 @@ class WorkloadTests(unittest.TestCase):
         self.assertIn('Stored fields to fetch per document: 2', text)
         self.assertIn('approximately 2', text)
         self.assertIn('document/field pairs: 2,002', text)
-        self.assertIn('Estimated stored-value scan time: 0.04-0.06 seconds', text)
-        self.assertIn('Timing metric: 18,000-25,500 records/second on MacBook Pro M4', text)
+        self.assertIn('Estimated stored-value scan time: 0.063-0.065 seconds', text)
+        self.assertIn('Timing metric: 15,300-15,800 records/second using Solr on MacBook Pro M4', text)
+        self.assertIn('full_checkup measurements: Solr 9.10.1 and 10.0.0', text)
+        self.assertNotIn('Prediction engine:', text)
         self.assertNotIn('Runtime: not estimated yet', text)
+
+    def test_elasticsearch_opensearch_estimate_uses_its_own_timing(self):
+        from dq.reports.checkup import _full_workload
+        fields = [{'name': 'email'}]
+        plans = {'email': {'email_composite': ''}}
+        text = '\n'.join(_full_workload(
+            fields, plans, 1000, engine='Elasticsearch/OpenSearch'))
+        self.assertIn('Estimated stored-value scan time: 0.060-0.060 seconds', text)
+        self.assertIn('16,700-16,800 records/second using Elasticsearch/OpenSearch', text)
+        self.assertIn('full_checkup measurements: Elasticsearch 9.5.3 and OpenSearch 3.8.0', text)
+        self.assertNotIn('Prediction engine:', text)
+        self.assertNotIn('15,300-15,800', text)
 
     def test_presence_only_has_no_scan(self):
         from dq.reports.checkup import _full_workload

@@ -1,9 +1,9 @@
 # Generate a Test Collection
 
-In this guide, **ES includes OpenSearch and the free/open-source and commercial
-editions of Elasticsearch**, for the shared index-creation and Bulk APIs used
-here. The ES generator and submission script work with both engines and do not
-require paid features.
+In this guide, **ES means Elasticsearch, including its commercial and
+open-source editions, and OpenSearch**, for the shared index-creation and Bulk
+APIs used here. The ES generator and submission script work with both engines
+and do not require paid features.
 
 Vocabulary Note: Solr calls a named set of documents a **collection**; Elasticsearch and
 OpenSearch call it an **index**. In this documentation, both terms refer
@@ -18,8 +18,8 @@ For this workflow, first enter `generate-test-collection/` from the project root
 
 Start in the DQ project’s main directory, then change into this directory as
 shown below. Python 3.4.10 or newer must be on PATH; no extra packages are needed.
-Solr must be running. The loader automatically finds `../dq.ini` for connection
-settings (unless a nearer `dq.ini` exists).
+The target search engine must be running. The loader automatically finds
+`../dq.ini` for connection settings (unless a nearer `dq.ini` exists).
 
 ```bash
 cd generate-test-collection
@@ -67,6 +67,10 @@ verified deliverable addresses. Files are covered by this project's Apache 2.0 l
 Text data fields end in `_t` and are explicitly stored and indexed as
 `text_general`: first_name, last_name, street_address, city, state, postal_code,
 country, email, phone, ssn, and notes. `id` is the unique key.
+`part_number_s` is an exact stored/indexed Solr `string` because a formatted
+identifier should not be analyzed into tokens. Valid examples use three letters,
+a dash, and six digits, such as `PRT-000001`. Injected errors include missing,
+null, empty, whitespace-only, and several malformed part-number values.
 `event_date_dt` is a native stored/indexed Solr `pdate`. Date-format validation
 is outside the MVP. Its injected defects are missing values, nulls, and future
 dates; Solr rejects malformed date strings.
@@ -173,6 +177,7 @@ values, not necessarily what Solr retains.
 ../bin/dq --main_url http://localhost:8983/solr/dq-demo --report full_checkup
 ../bin/dq --main_url http://localhost:8983/solr/dq-demo --rule missing_fields_base --action csv --include_field email_t
 ../bin/dq --main_url http://localhost:8983/solr/dq-demo --rule email_composite --action csv --include_field email_t
+../bin/dq --main_url http://localhost:8983/solr/dq-demo --rule part_number_example_composite --include_field part_number_s
 ```
 
 The normal configured credentials still apply. Reports are written to `reports_dir` (default: `reports/` under the current
@@ -207,8 +212,22 @@ free/open-source and commercial Elasticsearch editions. Throughout these
 commands and filenames, “ES” is shorthand for that shared workflow. From this
 directory, generate the shared data once:
 
+Run either ES script without arguments to display its syntax without writing
+files or contacting a server:
+
+```bash
+./generate-test-data-es.py
+./submit-to-es.py
+```
+
 ```bash
 ./generate-test-data-es.py --count 1000 --incorrect_percent 20
+```
+
+Check the generated ES data file:
+
+```bash
+ls -l documents-es.ndjson
 ```
 
 Submit to local Elasticsearch:
@@ -221,6 +240,19 @@ Or submit the same data to local OpenSearch:
 
 ```bash
 ./submit-to-es.py --submit --main_url http://localhost:9201
+```
+
+Run DQ against the Elasticsearch test index:
+
+```bash
+../bin/dq --main_url http://localhost:9200 --index dq-demo --report quick_checkup
+```
+
+For OpenSearch on the local test port, use `http://localhost:9201` instead.
+For a clean reload, use the same command structure as Solr with the ES action:
+
+```bash
+./submit-to-es.py --recreate_index --main_url http://localhost:9200
 ```
 
 Elasticsearch and OpenSearch use the same generated data, schema, and loader logic
@@ -255,6 +287,5 @@ credentials and trusted certificate settings. Supported keys are `main_url`, `us
 `trust_certificate`. CLI values override INI settings; certificate paths from INI
 are relative to that file. Examples are in `../dq.ini.template`.
 
-See [native server setup](../docs/local-search-engines.md) for startup/shutdown.
 Elasticsearch and OpenSearch share this test-data workflow; that does not imply
 that all features of the two products are interchangeable.

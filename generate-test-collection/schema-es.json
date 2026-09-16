@@ -36,6 +36,9 @@
       "ssn_t": {
         "type": "text"
       },
+      "part_number_s": {
+        "type": "keyword"
+      },
       "event_date_dt": {
         "type": "date"
       },

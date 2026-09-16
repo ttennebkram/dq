@@ -109,6 +109,10 @@ def scan(target, fields, plans, connection=None, progress=None, total=None, row_
                                           '' if value is None else stored.text(value))))
             if len(result['examples']) < 100:
                 result['examples'].append((identifier[:500], check + ': ' + reason, stored.text(value)[:500]))
+    completed_documents = documents[0]
+    if scan_progress and scan_progress.measurements:
+        completed_documents = scan_progress.measurements[-1]['records_checked']
     if progress:
-        progress.update('stored-value scan complete: {0:,} documents; {1:,} stored values'.format(documents[0], values_seen), force=True)
+        progress.update('stored-value scan complete: {0:,} documents; {1:,} stored values'.format(
+            completed_documents, values_seen), force=True)
     return results

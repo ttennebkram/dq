@@ -43,6 +43,7 @@ rows = -1
 # CLI --progress_every / --progress-every overrides this; accepts 1_000 notation.
 # Progress goes to stdout; report and CSV data remain in files.
 # Completed actions append scan timings to reports_dir/processing-stats.jsonl.
+# Each timing record identifies the search engine used.
 # Quick checkup has no scan timing. These measurements are for future estimates.
 # Preserved by the wizard without adding a prompt.
 progress_every = 1000
@@ -54,7 +55,8 @@ progress_every = 1000
 # Saved by --write_config and preserved by the wizard without another prompt.
 skip_null_values = false
 # Base URL for Solr, Elasticsearch, or OpenSearch.
-# For ES/OpenSearch, use e.g. http://localhost:9200 (default port 9200).
+# Elasticsearch example: http://localhost:9200
+# OpenSearch example: http://localhost:9200
 # It may include the collection or index name.
 main_url = http://localhost:8983/solr
 
@@ -119,6 +121,10 @@ collection = dq-demo
 #     Optional: rules default to csv; reports imply report. Do not combine rules and reports.
 # Rule, report, and action selection is CLI-only; do not save it as INI keys.
 #   --list_fields / --list-fields
+#   --list_collections / --list-collections
+#     List all Solr collections. A collection at the end of main_url is removed first.
+#   --list_indexes / --list-indexes
+#     Synonym that uses Elasticsearch/OpenSearch index terminology.
 #   --config_wizard / --setup_wizard
 #     Prompts only for URL, collection, optional login, and save confirmation.
 #     Writes ./dq.ini or --config FILE, which may be new.

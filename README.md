@@ -1,7 +1,7 @@
 DQ v2
 -----
 
-DQ v2 is a Search Engine Data Quality Toolkit for Apache Solr, Elasticsearch, and OpenSearch. GitHub repository: [https://github.com/ttennebkram/dq](https://github.com/ttennebkram/dq).
+DQ v2 is a **Search Engine Data Quality Toolkit** for Apache Solr, Elasticsearch, and OpenSearch. GitHub repository: [https://github.com/ttennebkram/dq](https://github.com/ttennebkram/dq).
 
 DQ is a command-line tool: you use it by typing commands in a terminal window.
 That can be Terminal on macOS, a terminal on Linux, or Windows Terminal running
@@ -111,8 +111,9 @@ and DQ terms such as collection/index and document/record.
 
 Start with the wizard to save your connection settings in `dq.ini`. For a new
 setup, it suggests `http://localhost:8983/solr` and collection `dq-demo`, the name
-used by the test-data loader. The URL prompt also shows an ES/OpenSearch
-example, `http://localhost:9200`, using their default port, 9200. Existing
+used by the test-data loader. The URL prompt also shows Elasticsearch at
+`http://localhost:9200` and OpenSearch at `http://localhost:9200`, their normal
+local HTTP addresses. Existing
 settings and CLI values take precedence; a collection included in the URL
 is used without a separate collection setting:
 
@@ -207,10 +208,11 @@ more detail and the `full_checkup` report.
 
 ## Generate a Test Collection
 
-This tool can generate fake/synthetic data and insert it into Solr or Elasticsearch (ES),
-including OpenSearch. The default collection/index is named `dq-demo`, which
-the Quickstart examples below assume you're using. If you prefer to
-work with your own data, you can skip this section.
+This tool can generate fake/synthetic data and insert it into Solr or ES.
+In this section, **ES means Elasticsearch, including its commercial and
+open-source editions, and OpenSearch**. The default collection/index is named
+`dq-demo`, which the Quickstart examples below assume you're using. If you
+prefer to work with your own data, you can skip this section.
 
 The scripts in `generate-test-collection/` generate test data with fake names,
 addresses, email addresses, phone numbers, SSN-shaped values, dates, and Unicode
@@ -231,6 +233,8 @@ From the main DQ project directory, go to `generate-test-collection/`:
 cd generate-test-collection
 ```
 
+### Solr Example
+
 Run the generator without arguments to display syntax and examples. This does
 not generate or overwrite any files:
 
@@ -238,10 +242,10 @@ not generate or overwrite any files:
 ./generate-test-data-solr.py
 ```
 
-Or on Windows do:
+On Windows, run the same Python script with the Python launcher:
 
 ```cmd
-.\generate-test-data-solr.cmd
+py -3 generate-test-data-solr.py
 ```
 
 Running with no arguments will show the syntax.
@@ -255,7 +259,7 @@ Example: Generate 1,000 records with a 20% incorrect-value setting.
 
 --count can be 1000 or 1_000.  The underscore notation works in this code even with Python 3.4
 
-Check the generated data file:
+Check the generated Solr data file:
 
 ```sh
 ls -l documents-solr.json
@@ -268,32 +272,28 @@ to use a different directory for `documents-solr.json` or `documents-es.ndjson`.
 Reusable setup files and instructions remain in `generate-test-collection/`.
 Generated JSON is ignored by Git.
 
-Create the Solr collection if needed:
-
-```sh
-./submit-to-solr.py --recreate_collection
-```
-
-Then submit the generated records:
+Submit the generated records, creating the Solr collection if needed:
 
 ```sh
 ./submit-to-solr.py --submit
 ```
 
+To remove the old test collection, rebuild it, and load the generated records:
+
+```sh
+./submit-to-solr.py --recreate_collection
+```
+
 Run a quick checkup on the test collection:
 
 ```sh
-../bin/dq --report quick_checkup
+../bin/dq --main_url http://localhost:8983/solr --collection dq-demo --report quick_checkup
 ```
 
 The loader finds the parent `dq.ini` automatically. Generated JSON stays in the
 current directory; reports use `reports_dir`.
 
-The loader resubmits matching IDs by default. To rebuild the test collection
-and configset, removing its old records before loading, run this from the same
-`generate-test-collection/` directory:
-
-TODO: what goes here?
+The loader resubmits matching IDs by default.
 
 **Test-data generation is random by default.** Omit `--seed` for a fresh run;
 use `--seed N` to reproduce one with the same options and generator/Python
@@ -309,27 +309,43 @@ For special empty-string tests, enable preservation when submitting:
 Normally omit this flag: each submission restores standard Solr blank removal
 unless preservation is explicitly requested. No configuration JSON file is needed.
 
-For Elasticsearch and OpenSearch test indexes, stay in the same directory and
-generate the shared ES data file:
+### ES Example
+
+For Elasticsearch or OpenSearch, stay in the same directory and generate the
+shared ES data file. Run without arguments to display its syntax:
 
 ```sh
-./generate-test-data-es.py --count 1_000
+./generate-test-data-es.py
 ```
 
-Check the generated file:
+On Windows:
+
+```cmd
+py -3 generate-test-data-es.py
+```
+
+Generate the same 1,000-record, 20%-incorrect fixture in ES format:
+
+```sh
+./generate-test-data-es.py --count 1_000 --incorrect_percent 20
+```
+
+Check the generated ES data file:
 
 ```sh
 ls -l documents-es.ndjson
 ```
 
-Create the index if needed:
-
-./submit-to-es.py --recreate_index
-
-And submit the generated records:
+Submit the generated records, creating the ES index if needed:
 
 ```sh
 ./submit-to-es.py --submit
+```
+
+To remove the old test index, rebuild it, and load the generated records:
+
+```sh
+./submit-to-es.py --recreate_index
 ```
 
 The same submission command supports OpenSearch. To use the local instance on
@@ -339,10 +355,19 @@ port 9201:
 ./submit-to-es.py --main_url http://localhost:9201 --submit
 ```
 
+Run the equivalent quick checkup against Elasticsearch:
+
+```sh
+../bin/dq --main_url http://localhost:9200 --index dq-demo --report quick_checkup
+```
+
+For OpenSearch on the local test port, change the URL to
+`http://localhost:9201`. ES and OpenSearch preserve empty strings in `_source`
+normally, so they do not need Solr's `--preserve_empty_strings` loader option.
+
 Both engines share `documents-es.ndjson`, `schema-es.json`, and the basic loader
 API logic. Solr uses `documents-solr.json` and `schema-solr.json`.
-See the [test collection quickstart](generate-test-collection/README.md#elasticsearch-and-opensearch-quickstart)
-and [native server setup](docs/local-search-engines.md).
+See the [test collection quickstart](generate-test-collection/README.md#elasticsearch-and-opensearch-quickstart).
 The shared ES/OpenSearch loader accepts `--main_url`, `--index`, `--data_files_dir`,
 `--config`, `--username`, `--password`, `--trust_certificate`, and either
 `--submit` or `--recreate_index`. It reads connection keys from the
@@ -396,6 +421,8 @@ Select a rule, a special report, or a utility command:
 ```sh
 bin/dq --list_fields --main_url URL --collection NAME
 bin/dq --list_fields
+bin/dq --list_collections
+bin/dq --list_indexes
 bin/dq --list_reports
 bin/dq --list_rules
 bin/dq --report NAME [NAME ...]
@@ -694,6 +721,8 @@ action selections are command-line options and are not saved in `dq.ini`.
 | Command                              | What It Does                                                        |
 | ------------------------------------ | ------------------------------------------------------------------- |
 | `--list_fields`                      | List fields, schema properties, and document counts on stdout.      |
+| `--list_collections`                 | List Solr collection names on stdout.                               |
+| `--list_indexes`                     | List Elasticsearch/OpenSearch index names on stdout.                |
 | `--list_reports`                     | List reports, status, and descriptions on stdout.                   |
 | `--list_rules`                       | List rules, Base and Predefined Composite type, and descriptions.   |
 | `--config_wizard` / `--setup_wizard` | Walk through connection settings and save the INI file.             |
@@ -701,8 +730,12 @@ action selections are command-line options and are not saved in `dq.ini`.
 | `--help` / `-h`                      | Display syntax, options, and the current report catalog.            |
 | `--version`                          | Display the DQ version.                                             |
 
-Hyphenated aliases are also accepted: `--list-fields`, `--list-reports`,
-`--list-rules`, `--config-wizard`,
+`--list_collections` and `--list_indexes` are synonyms. If `main_url` includes
+a Solr collection or an Elasticsearch/OpenSearch index, DQ removes that final
+target before asking the server for its complete catalog.
+
+Hyphenated aliases are also accepted: `--list-fields`, `--list-collections`,
+`--list-indexes`, `--list-reports`, `--list-rules`, `--config-wizard`,
 `--setup-wizard`, and `--write-config`. Select one action per invocation;
 multiple report names belong to one `--report` action.
 
@@ -1241,14 +1274,48 @@ Required software:
 
 Dependencies: No runtime or development dependencies; DQ uses only the Python standard library.
 
+### Tested Search Engines
+
+This version has been tested with:
+
+| Engine | Version |
+| ------ | ------- |
+| Apache Solr | 9.10.1 |
+| Apache Solr | 10.0.0 |
+| Elasticsearch | 9.5.3 |
+| OpenSearch | 3.8.0 |
+
+The `full_checkup` performance estimates use one-million-document measurements
+from these versions on a MacBook Pro M4.
+
+### Project Directory Tree
+
+The main project directories and files are:
+
+| Path | Purpose |
+| ---- | ------- |
+| <nobr><code>dq/</code></nobr> | Project root. |
+| <nobr><code>├── aux-bin/</code></nobr> | Optional helper scripts for managing a local Solr installation. |
+| <nobr><code>├── bin/</code></nobr> | DQ command-line launchers for macOS, Linux, and Windows. |
+| <nobr><code>├── docs/</code></nobr> | Additional reference material. In this version, most documentation is in the main `README.md` file. |
+| <nobr><code>├── generate-test-collection/</code></nobr> | Generates fake test data and submits it to Solr, Elasticsearch, or OpenSearch. |
+| <nobr><code>├── reports/</code></nobr> | Default destination for generated Markdown and CSV output. |
+| <nobr><code>├── src/</code></nobr> | Python source tree. |
+| <nobr><code>│   └── dq/</code></nobr> | Main Python package. |
+| <nobr><code>│       ├── reports/</code></nobr> | Special report packages and shared report formatting. |
+| <nobr><code>│       └── rules/</code></nobr> | Base rules, predefined composite rules, and shared rule code. This is where your custom rules would also go. See [Custom Regex Rule Example](#custom-regex-rule-example) and [Custom Composite Rule Example](#custom-composite-rule-example). |
+| <nobr><code>├── tests/</code></nobr> | Automated test suite. |
+| <nobr><code>├── dq.ini.template</code></nobr> | Example containing the supported configuration settings. |
+| <nobr><code>├── LICENSE.txt</code></nobr> | Apache License 2.0 terms. |
+| <nobr><code>└── README.md</code></nobr> | Main user and developer documentation. |
+
 ### Internal Rule and Report Modules
 
 Rules live under `src/dq/rules/`. Built-in Markdown reports and their shared
 formatting live under `src/dq/reports/`. These report packages are part of DQ
 itself. The MVP does not support user-defined custom reports or load report code
-from outside the source tree. See
-[Internal Rules and Reports](docs/report-modules.md) for the package layout and
-handler interfaces used by DQ development.
+from outside the source tree. Detailed package layouts and handler interfaces
+are documented in `docs/report-modules.md`.
 
 ### Custom Rules
 
@@ -1269,20 +1336,20 @@ comments in `dq/src/dq/rules/part_number_example_base/rule.ini`.
 | File | Purpose |
 | ---- | ------- |
 | `__init__.py` | Marks the directory as a Python rule package. |
-| `rule.ini` | Configures the directory-named rule and its numbered `[regex:regex01]` check. |
+| `rule.ini` | Configures the directory-named rule and references to any regexes it uses. |
 | `part_number_example.regex` | Contains the extended regular expression for the part-number format. |
 
 Run the base rule when only that format check is wanted:
 
 ```sh
-bin/dq --rule part_number_example_base --include_field part_number_t --rows 1_000
+bin/dq --rule part_number_example_base --include_field part_number_s --rows 1_000
 ```
 
 To keep missing or null fields out of the CSV file, add
 `--skip_null_values true`:
 
 ```sh
-bin/dq --rule part_number_example_base --include_field part_number_t --rows 1_000 --skip_null_values true
+bin/dq --rule part_number_example_base --include_field part_number_s --rows 1_000 --skip_null_values true
 ```
 
 This reports only actual string values that do not match the part-number regex.
@@ -1307,15 +1374,17 @@ DQ therefore reports standard text problems, such as missing values or
 surrounding whitespace, before applying the part-number format check:
 
 ```sh
-bin/dq --rule part_number_example_composite --include_field part_number_t
+bin/dq --rule part_number_example_composite --include_field part_number_s
 ```
 
 ### Automatic Field Name and Type Matching
 
 DQ identifies text/string fields from search-engine metadata rather than relying
 on `_t` or `_s` name suffixes. For Solr, it reads the schema field type and its
-underlying field-type class. For Elasticsearch and OpenSearch, it reads the index
-mapping and recognizes string types such as `text` and `keyword`.
+underlying field-type class. DQ recognizes the Solr base classes `TextField`,
+`StrField`, `SortableTextField`, and `UUIDField` as text/string fields. For
+Elasticsearch and OpenSearch, it reads the index mapping and recognizes string
+types such as `text` and `keyword`.
 
 Most text/string fields receive `standard_text_composite`, unless the field name
 implies a special type such as an email address, phone number, or Social Security

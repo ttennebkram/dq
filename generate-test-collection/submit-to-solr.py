@@ -14,6 +14,8 @@ from dq.config import load_config, collection_url
 from dq.connection import Connection
 from dq.solr import get_json
 
+BATCH_SIZE = 5000
+
 
 def prepare_collection(base, connection, recreate=False):
     name = 'dq-demo'
@@ -129,7 +131,13 @@ def main(argv=None):
     processor = 'solr.LogUpdateProcessorFactory' if args.preserve_empty_strings else 'solr.RemoveBlankFieldUpdateProcessorFactory'
     post('config', {'update-updateprocessor': {'name': 'remove-blank', 'class': processor}})
     print('Empty strings: ' + ('preserved (special test mode)' if args.preserve_empty_strings else 'removed (normal Solr processing)'))
-    post('update?commit=true', documents)
+    total = len(documents)
+    for start in range(0, total, BATCH_SIZE):
+        end = min(start + BATCH_SIZE, total)
+        endpoint = 'update?commit=true' if end == total else 'update'
+        post(endpoint, documents[start:end])
+        if end == total or end % 50000 == 0:
+            print('Submitted {0:,} / {1:,} records'.format(end, total), flush=True)
     count = get_json(target, 'select', connection=connection, q='*:*', rows=0, wt='json')['response']['numFound']
     if created and count != len(documents):
         raise ValueError('Demo document count does not match fixture')

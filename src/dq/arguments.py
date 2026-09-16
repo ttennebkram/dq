@@ -44,6 +44,8 @@ def build_parser():
         add_help=False,
         usage="""%(prog)s --list_fields --main_url URL --collection NAME
        %(prog)s --list_fields  (assumes reading other parameters from dq.ini)
+       %(prog)s --list_collections
+       %(prog)s --list_indexes
        %(prog)s --list_reports
        %(prog)s --list_rules
        %(prog)s --rule NAME [NAME ...]
@@ -107,6 +109,10 @@ More help: See the "More Help" section of README.md.
         action="store_true",
         help="list Solr collection fields and their schema properties",
     )
+    commands.add_argument('--list_collections', '--list-collections', action='store_true',
+                          help='list collection names on stdout; removes a collection from main_url first')
+    commands.add_argument('--list_indexes', '--list-indexes', action='store_true',
+                          help='list index names on stdout; synonym for --list_collections')
     commands.add_argument('--list_reports', '--list-reports', action='store_true',
                           help='list special reports and implementation status on stdout')
     commands.add_argument('--list_rules', '--list-rules', action='store_true',
@@ -191,11 +197,12 @@ def resolve_selection(options, parser):
         setattr(options, name, [pattern for group in groups for pattern in group])
     rules = [name for group in options.rule for name in group]
     reports = [name for group in options.report for name in group]
-    utilities = sum(bool(value) for value in (options.list_fields, options.list_reports,
-                                              options.list_rules, options.write_config,
-                                              options.config_wizard))
+    utilities = sum(bool(value) for value in (
+        options.list_fields, options.list_collections, options.list_indexes,
+        options.list_reports, options.list_rules, options.write_config,
+        options.config_wizard))
     if utilities > 1 or (utilities and (rules or reports or options.action)):
-        parser.error('choose a rule/action pair, a special report, or one utility command: --list_fields, --list_reports, --list_rules, --write_config, or --config_wizard')
+        parser.error('choose a rule/action pair, a special report, or one utility command: --list_fields, --list_collections/--list_indexes, --list_reports, --list_rules, --write_config, or --config_wizard')
     if reports and (rules or options.action == 'csv'):
         parser.error('cannot combine --report with --rule; use one or the other')
     if rules and options.action == 'report':

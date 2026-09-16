@@ -50,12 +50,13 @@ class StatsTests(unittest.TestCase):
                 progress.finish(3)
             path = save_scan_stats(directory, 'https://user:password@solr/c?token=secret#fragment',
                                    'csv', 'missing_fields_base', progress, -1, False)
-            note_rate(directory, 12586.5)
+            note_rate(directory, 12586.5, 'Solr')
             with open(path) as stream:
                 text = stream.read()
             records = [json.loads(line) for line in text.splitlines()]
             self.assertEqual(len(records), 3)
             self.assertEqual(records[0]['target'], 'https://solr/c')
+            self.assertEqual(records[0]['engine'], 'Solr')
             self.assertEqual(records[0]['records_checked'], 1000)
             self.assertEqual(records[0]['field_count'], 1)
             self.assertTrue(records[0]['machine'])
@@ -64,6 +65,7 @@ class StatsTests(unittest.TestCase):
             self.assertEqual(records[1]['count_unit'], 'missing documents')
             self.assertIsNone(records[1]['records_per_second'])
             self.assertEqual(records[2]['source'], 'user-reported')
+            self.assertEqual(records[2]['engine'], 'Solr')
             self.assertTrue(records[2]['machine'])
             self.assertNotIn('fields', records[2])
             self.assertNotIn('password', text)

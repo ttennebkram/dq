@@ -71,6 +71,13 @@
       "multiValued": false
     },
     {
+      "name": "part_number_s",
+      "type": "string",
+      "stored": true,
+      "indexed": true,
+      "multiValued": false
+    },
+    {
       "name": "event_date_dt",
       "type": "pdate",
       "stored": true,

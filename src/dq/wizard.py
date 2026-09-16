@@ -38,7 +38,10 @@ def run_wizard(options):
     print('Defaults come from command-line options, this destination file, then built-in suggestions.')
     url = options.main_url or config.main_url or 'http://localhost:8983/solr'
     collection = options.collection if options.collection is not None else (config.collection or 'dq-demo')
-    print('For ES/OpenSearch, enter e.g. http://localhost:9200 (default port 9200).')
+    print('Base URL examples:')
+    print('  Solr:          http://localhost:8983/solr')
+    print('  Elasticsearch: http://localhost:9200')
+    print('  OpenSearch:    http://localhost:9200')
     while True:
         url = _ask('main_url', url)
         try:
@@ -102,5 +105,8 @@ def run_wizard(options):
     write_config(path, url, collection, include_fields=include, exclude_fields=exclude,
                  preserve_optional=False,
                  reports_dir=getattr(options, 'reports_dir', None) if getattr(options, 'reports_dir', None) is not None else config.reports_dir, rows=rows, progress_every=resolve_progress_every(options, config), skip_null_values=resolve_skip_null_values(options, config), **values)
-    print('Wrote configuration: {0}'.format(path))
+    if exists:
+        print('Merging with existing configuration: {0}'.format(path))
+    else:
+        print('Wrote configuration: {0}'.format(path))
     return 0

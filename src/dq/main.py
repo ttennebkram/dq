@@ -3,10 +3,10 @@ import os
 import sys
 from dq.arguments import build_parser, resolve_selection
 from dq.files import absolute_path
-from dq.config import ConfigError, DqConfig, collection_url, load_config, main_url_has_collection, write_config
+from dq.config import ConfigError, DqConfig, catalog_url, collection_url, load_config, main_url_has_collection, write_config
 from dq.connection import connection_values, make_connection
 from dq.settings import _resolve_field_filters, resolve_rows, resolve_progress_every, resolve_skip_null_values
-from dq.listing import print_fields, print_reports, print_rules
+from dq.listing import print_collections, print_fields, print_reports, print_rules
 from dq.actions import run_reports, run_csv
 from dq.solr import SolrError
 
@@ -30,6 +30,17 @@ def main(argv=None):
             parser.exit(130, '\ndq: configuration wizard cancelled; no file written\n')
         except (ConfigError, OSError) as error:
             parser.exit(2, 'dq: error: {0}\n'.format(error))
+    if options.list_collections or options.list_indexes:
+        try:
+            config = load_config(options.config)
+            connection = make_connection(options, config)
+            target = catalog_url(config, main_url=options.main_url)
+            noun = 'indexes' if options.list_indexes else 'collections'
+            print_collections(target, noun=noun, configuration_path=config.source,
+                              configuration_explicit=bool(options.config), connection=connection)
+        except (ConfigError, SolrError) as error:
+            parser.exit(2, 'dq: error: {0}\n'.format(error))
+        return 0
     if options.action == 'csv' and options.rule:
         return run_csv(options, parser)
     if options.write_config:
@@ -94,5 +105,5 @@ def main(argv=None):
         missing = 'no action was selected; use --action csv with the selected rule'
     else:
         missing = ('no rule/action, report, or utility command was selected; use --rule NAME --action csv, --report NAME, '
-                   '--list_fields, --list_reports, --list_rules, --write_config, or --config_wizard')
+                   '--list_fields, --list_collections/--list_indexes, --list_reports, --list_rules, --write_config, or --config_wizard')
     parser.exit(2, 'dq: error: target resolves to {0}{1}, but {2}\n'.format(target, configuration_detail, missing))

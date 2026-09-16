@@ -52,6 +52,23 @@ def _cluster_url(index_url):
     return urlunsplit((parsed.scheme, parsed.netloc, path, '', ''))
 
 
+def list_indexes(cluster_url, connection=None):
+    """Return index names from the Elasticsearch/OpenSearch cat API."""
+    response = request_json(cluster_url, '_cat/indices', connection=connection,
+                            format='json', h='index')
+    if not isinstance(response, list):
+        raise ElasticsearchError(
+            'Elasticsearch/OpenSearch cat indices response did not contain a list')
+    names = []
+    for item in response:
+        name = item.get('index') if isinstance(item, dict) else None
+        if not isinstance(name, str):
+            raise ElasticsearchError(
+                'Elasticsearch/OpenSearch cat indices response contained an invalid index name')
+        names.append(name)
+    return sorted(names)
+
+
 def _source_allowed(name, source):
     if source is False or (isinstance(source, dict) and source.get('enabled') is False):
         return False

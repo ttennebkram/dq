@@ -66,6 +66,8 @@ class CompatibilityTests(unittest.TestCase):
         self.assertIn('--list_rules', help_text)
         utility_text = help_text[help_text.index('Utility Commands (choose one):'):]
         self.assertIn('--list_fields', utility_text)
+        self.assertIn('--list_collections', utility_text)
+        self.assertIn('--list_indexes', utility_text)
         output_text = help_text[help_text.index('Output and Scanning:'):]
         self.assertLess(output_text.index('--rows N, --size N'),
                         output_text.index('--skip_null_values'))

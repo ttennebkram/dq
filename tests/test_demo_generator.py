@@ -3,6 +3,7 @@ import runpy
 from types import SimpleNamespace
 import os
 import io
+import re
 from unittest.mock import Mock, patch
 import unittest
 
@@ -31,6 +32,17 @@ class DemoGeneratorTests(unittest.TestCase):
         for kwargs in ({'count':0}, {'incorrect_percent':101}, {'incorrect_percent':float('nan')}):
             with self.assertRaises(ValueError):
                 demo.generate(**dict({'count':100}, **kwargs))
+
+    def test_part_numbers_include_valid_and_varied_invalid_values(self):
+        pattern = re.compile(r'^[A-Za-z]{3}-[0-9]{6}$')
+        self.assertTrue(pattern.match(demo.valid_values(7)['part_number_s']))
+        docs, expected = demo.generate(100, incorrect_percent=20, seed=42)
+        by_id = dict((doc['id'], doc) for doc in docs)
+        malformed = [row for row in expected['injected_errors']
+                     if row['field'] == 'part_number_s' and row['kind'] == 'malformed']
+        values = [by_id[row['id']]['part_number_s'] for row in malformed]
+        self.assertGreater(len(set(values)), 1)
+        self.assertTrue(all(pattern.match(value) is None for value in values))
 
     def test_per_field_option_is_not_supported(self):
         with patch('sys.stderr', io.StringIO()), self.assertRaises(SystemExit) as error:

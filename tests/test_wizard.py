@@ -34,6 +34,7 @@ class WizardTests(unittest.TestCase):
             self.assertIsNone(config.exclude_fields)
             self.assertNotIn('private%secret', output)
             self.assertIn('Invalid target', output)
+            self.assertIn('Wrote configuration: {0}'.format(os.path.realpath(path)), output)
             self.assertEqual(os.stat(path).st_mode & 0o777, 0o600)
 
     def test_update_clear_auth_embedded_collection_preserves_filters(self):
@@ -41,8 +42,8 @@ class WizardTests(unittest.TestCase):
             path = os.path.join(directory, 'dq.ini')
             write_config(path, 'http://localhost:8983/solr', 'old', username='solr',
                          password='oldsecret', include_fields=['old_*'])
-            self.run_wizard(path, ['', '-', ''],
-                            extra=['--main_url', 'http://localhost:8983/solr/new'])
+            output = self.run_wizard(path, ['', '-', ''],
+                                     extra=['--main_url', 'http://localhost:8983/solr/new'])
             config = load_config(path)
             self.assertIsNone(config.collection)
             self.assertIsNone(config.username)
@@ -52,6 +53,8 @@ class WizardTests(unittest.TestCase):
                 text = stream.read()
             self.assertIn('# Previous collection = old', text)
             self.assertNotIn('oldsecret', text)
+            self.assertIn('Merging with existing configuration: {0}'.format(
+                os.path.realpath(path)), output)
 
     def test_decline_and_eof_preserve_existing_file(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -71,10 +74,13 @@ class WizardTests(unittest.TestCase):
     def test_new_setup_defaults_to_generated_collection(self):
         with tempfile.TemporaryDirectory() as directory:
             path = os.path.join(directory, 'dq.ini')
-            self.run_wizard(path, [''] * 4)
+            output = self.run_wizard(path, [''] * 4)
             config = load_config(path)
             self.assertEqual(config.main_url, 'http://localhost:8983/solr')
             self.assertEqual(config.collection, 'dq-demo')
+            self.assertIn('Solr:          http://localhost:8983/solr', output)
+            self.assertIn('Elasticsearch: http://localhost:9200', output)
+            self.assertIn('OpenSearch:    http://localhost:9200', output)
 
     def test_existing_and_cli_collection_override_demo_default(self):
         with tempfile.TemporaryDirectory() as directory:
