@@ -1,7 +1,13 @@
 # Practical ASCII email-address syntax, not a complete RFC mailbox parser.
 # Based on RFC 5322 dot-atom local parts: https://www.rfc-editor.org/rfc/rfc5322
-# Requires a dotted hostname. Quoted local parts, address literals, display
-# names, and internationalized local parts are deliberately outside this preset.
+# Requires a dotted hostname.
+#
+# Out of Scope
+# - Quoted local parts
+# - Address literals
+# - Display names
+# - Internationalized local parts
+#
 # A match does not establish that the domain or mailbox exists.
 # Use verbose mode and full matching, as configured in rule.ini.
 

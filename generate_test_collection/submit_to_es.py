@@ -1,9 +1,8 @@
-"""Shared Elasticsearch/OpenSearch index creation and bounded NDJSON loading."""
+#!/usr/bin/env python3
+"""Create an Elasticsearch/OpenSearch index and submit bounded NDJSON batches."""
 import argparse
-import configparser
 import json
 import os
-import re
 import sys
 import time
 from urllib.error import HTTPError
@@ -12,6 +11,9 @@ from urllib.request import Request
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
 from dq.config import load_config
 from dq.connection import Connection
+from dq.search import is_solr_target
+
+TARGET_INDEX = 'dq_demo'
 
 
 class SubmissionError(ValueError):
@@ -84,27 +86,27 @@ def check_bulk(response, count):
 
 
 def connection_settings(options):
-    # Reuse discovery, but never forward Solr credentials to a different engine.
+    # Reuse the normal DQ target only when it is already an ES/OpenSearch URL.
+    # Never forward credentials saved for Solr to a different engine.
     found = load_config(options.config)
     settings = {}
-    section = None
-    if found.source:
-        ini = configparser.ConfigParser(interpolation=None)
-        with open(found.source, encoding='utf-8') as stream:
-            ini.read_file(stream)
-        ini.defaults().clear()
-        # One shared section for either engine. Retain older OpenSearch-only files.
-        for candidate in ('elasticsearch', 'opensearch'):
-            if ini.has_section(candidate):
-                section = candidate
-                settings = dict(ini.items(section))
-                break
+    source = None
+    if found.main_url and is_solr_target(found.main_url) and options.main_url is None:
+        raise SubmissionError(
+            'dq.ini main_url identifies Solr; submit_to_es.py requires an Elasticsearch/OpenSearch URL')
+    if found.main_url and not is_solr_target(found.main_url):
+        source = 'DQ target settings'
+        settings = dict((name, getattr(found, name)) for name in (
+            'main_url', 'username', 'password', 'trust_certificate')
+                        if getattr(found, name) is not None)
     for name in ('main_url', 'username', 'password', 'trust_certificate'):
         supplied = getattr(options, name)
         if supplied is not None:
             settings[name] = supplied
-    url = settings.get('main_url', 'http://localhost:' + ('9201' if section == 'opensearch' else '9200'))
+    url = settings.get('main_url', 'http://localhost:9200')
     parsed = urlsplit(url)
+    if is_solr_target(url):
+        raise SubmissionError('submit_to_es.py requires an Elasticsearch/OpenSearch URL, not a Solr URL')
     if parsed.scheme not in ('http','https') or not parsed.hostname or parsed.username or parsed.password or parsed.path not in ('','/') or parsed.query or parsed.fragment:
         raise SubmissionError('main_url must be an HTTP(S) server root without index path or credentials')
     cert = settings.get('trust_certificate')
@@ -112,7 +114,7 @@ def connection_settings(options):
         cert = os.path.expanduser(cert)
         if options.trust_certificate is None and found.source and not os.path.isabs(cert):
             cert = os.path.join(os.path.dirname(found.source), cert)
-    return url.rstrip('/'), Connection(settings.get('username'), settings.get('password'), cert), found.source, section
+    return url.rstrip('/'), Connection(settings.get('username'), settings.get('password'), cert), found.source, source
 
 
 def server_identity(identity):
@@ -130,22 +132,21 @@ def server_identity(identity):
 
 
 def main(argv=None):
-    prog = 'submit-to-es.py'
-    parser = argparse.ArgumentParser(prog=prog, description='Create an index and submit test data to Elasticsearch or OpenSearch. The same command, schema and bulk format support both.',
-        epilog='Reads [elasticsearch] in dq.ini for either engine. A legacy [opensearch] section is used only when [elasticsearch] is absent. For the local OpenSearch instance: --main_url http://localhost:9201. No engine switch is needed.')
+    prog = 'submit_to_es.py'
+    parser = argparse.ArgumentParser(prog=prog, description='Create the fixed dq_demo index and submit test data to Elasticsearch or OpenSearch. The same command, schema and bulk format support both.',
+        epilog='Uses the server and authentication settings from dq.ini when main_url identifies Elasticsearch or OpenSearch. The dq.ini collection/index setting is ignored: this loader always uses dq_demo. For a different server, use --main_url or a separate DQ configuration file. No engine switch is needed.')
     actions = parser.add_mutually_exclusive_group(required=True)
     actions.add_argument('--submit', action='store_true', help='create index if needed and add/replace matching IDs')
     actions.add_argument('--recreate_index', '--recreate-index', action='store_true', help='delete the target index, recreate mappings, and submit')
-    parser.add_argument('--data_files_dir', '--data-files-dir', default='.', help='directory containing documents-es.ndjson; default: cwd')
-    parser.add_argument('--index', default='dq-demo', help='target index (default: dq-demo)')
+    parser.add_argument('--data_files_dir', '--data-files-dir', default='.', help='directory containing documents_es.ndjson; default: cwd')
     parser.add_argument('--config', help='INI file; otherwise discover dq.ini in cwd/parents')
     parser.add_argument('--main_url', '--main-url', help='Elasticsearch or OpenSearch server root; overrides INI main_url; default: http://localhost:9200')
     for name in ('username','password','trust_certificate'):
-        parser.add_argument('--' + name, help='override the shared [elasticsearch] INI setting')
+        parser.add_argument('--' + name, help='override the normal DQ connection setting')
     argv = sys.argv[1:] if argv is None else argv
     if not argv:
         parser.print_help()
-        path = os.path.abspath('documents-es.ndjson')
+        path = os.path.abspath('documents_es.ndjson')
         print('\nData file: ' + path)
         print('Exists: {0}, Readable: {1}'.format('yes' if os.path.isfile(path) else 'no','yes' if os.access(path, os.R_OK) else 'no'))
         if os.path.isfile(path) and os.access(path, os.R_OK):
@@ -157,20 +158,18 @@ def main(argv=None):
         return 0
     args = parser.parse_args(argv)
     try:
-        if not re.match(r'^[a-z0-9][a-z0-9_-]*$', args.index):
-            raise SubmissionError('index must use lowercase letters, digits, hyphens, and underscores')
-        path = os.path.join(args.data_files_dir, 'documents-es.ndjson')
+        path = os.path.join(args.data_files_dir, 'documents_es.ndjson')
         total = sum(count for _,count in batches(path))  # Validate before destructive requests.
-        with open(os.path.join(os.path.dirname(__file__), 'schema-es.json'), encoding='utf-8') as stream:
+        with open(os.path.join(os.path.dirname(__file__), 'schema_es.json'), encoding='utf-8') as stream:
             schema = json.load(stream)
-        base, connection, config, section = connection_settings(args)
+        base, connection, config, settings_source = connection_settings(args)
         identity = request(connection, base, '/')
         actual, version = server_identity(identity)
-        print('Target: {0}/{1} ({2} {3})'.format(base,args.index,actual,version))
+        print('Target: {0}/{1} ({2} {3})'.format(base,TARGET_INDEX,actual,version))
         if config:
-            origin = 'section [{0}]'.format(section) if section else 'no ES/OpenSearch section; using CLI/defaults'
+            origin = settings_source if settings_source else 'CLI/defaults'
             print('Configuration: {0}, {1}'.format(config,origin))
-        index_path = '/' + quote(args.index, safe='')
+        index_path = '/' + quote(TARGET_INDEX, safe='')
         existing = request(connection,base,index_path,allow_missing=True)
         if existing is not None and args.recreate_index:
             deleted = request(connection,base,index_path,method='DELETE')

@@ -37,7 +37,7 @@ def run_wizard(options):
     print('Enter keeps the displayed default; - clears an optional value. Ctrl-C cancels.')
     print('Defaults come from command-line options, this destination file, then built-in suggestions.')
     url = options.main_url or config.main_url or 'http://localhost:8983/solr'
-    collection = options.collection if options.collection is not None else (config.collection or 'dq-demo')
+    collection = options.collection if options.collection is not None else (config.collection or 'dq_demo')
     print('Base URL examples:')
     print('  Solr:          http://localhost:8983/solr')
     print('  Elasticsearch: http://localhost:9200')

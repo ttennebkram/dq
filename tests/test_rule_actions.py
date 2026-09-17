@@ -117,35 +117,38 @@ class SpecialReportTests(unittest.TestCase):
                 patch('dq.stored.values', return_value=iter(source)) as scan, patch('sys.stdout', io.StringIO()) as out:
             self.assertEqual(main(['--report', 'full_checkup', '--action', 'report']), 0)
             self.assertEqual(scan.call_count, 1)
-            self.assertEqual([f['name'] for f in scan.call_args[0][1]], ['email_t', 'notes_t', 'clean_t'])
+            self.assertEqual([f['name'] for f in scan.call_args[0][1]],
+                             ['email_t', 'notes_t', 'clean_t', 'vector'])
             with open(os.path.join(root, 'reports', 'full_checkup.md')) as stream:
                 report = stream.read()
-            self.assertIn('Docs w/Value', report)
-            self.assertLess(report.index('Docs w/Value'), report.index('Docs w/o Value'))
-            self.assertRegex(report, r'`email_t`\s*\|\s*1\s*\|\s*1\s*\|')
-            self.assertIn('(email_t_full_checkup.md)', report)
-            self.assertIn('(email_t_full_checkup.csv)', report)
-            self.assertIn('presence counts only', report)
-            with open(os.path.join(root, 'reports', 'email_t_full_checkup.csv'), newline='') as stream:
+            self.assertIn('Bad Values Reported', report)
+            self.assertNotIn('Docs w/Value', report)
+            self.assertIn('Fields checked in collection/index `c`; 2 documents scanned:', report)
+            self.assertIn('- Full report runtime:', report)
+            self.assertNotIn('(email_t_full_checkup.md)', report)
+            self.assertIn('CSV File', report)
+            self.assertIn('reports/email_t_email_composite.csv', report)
+            self.assertNotIn('[CSV]', report)
+            with open(os.path.join(root, 'reports', 'email_t_email_composite.csv'), newline='') as stream:
                 rows = list(csv.reader(stream))
             self.assertEqual(rows[0], ['id', 'reason', 'value'])
             self.assertEqual(rows[1][0], long_id)
             self.assertEqual(rows[1][2], long_value)
             self.assertTrue(rows[1][1].startswith('email_base: no configured regex matched'))
-            with open(os.path.join(root, 'reports', 'clean_t_full_checkup.csv'), newline='') as stream:
+            with open(os.path.join(root, 'reports', 'clean_t_standard_text_composite.csv'), newline='') as stream:
                 self.assertEqual(list(csv.reader(stream)), [['id', 'reason', 'value']])
-            self.assertFalse(os.path.exists(os.path.join(root, 'reports', 'vector_full_checkup.csv')))
-            with open(os.path.join(root, 'reports', 'email_t_full_checkup.md')) as stream:
-                self.assertIn('(email_t_full_checkup.csv)', stream.read())
+            self.assertTrue(os.path.isfile(os.path.join(
+                root, 'reports', 'vector_missing_fields_base.csv')))
+            self.assertFalse(os.path.exists(os.path.join(root, 'reports', 'email_t_full_checkup.md')))
             summary = out.getvalue().split('Main Report File:\n')[1]
             main_output, others = summary.split('\nOther Created Files:\n')
             self.assertEqual(main_output, '  reports/full_checkup.md\n')
-            self.assertEqual(len(others.splitlines()), 7)
+            self.assertEqual(len(others.splitlines()), 4)
             for item in others.splitlines():
                 self.assertTrue(item.strip().startswith('reports/'))
                 self.assertTrue(os.path.isfile(os.path.join(root, item.strip())))
 
-    def test_quick_followups_are_at_bottom_use_exact_fields_and_do_not_scan(self):
+    def test_quick_followups_follow_results_use_exact_fields_and_do_not_scan(self):
         field = "email ' [x]*_t"
         with tempfile.TemporaryDirectory() as root:
             config = os.path.join(root, 'settings file.ini')
@@ -160,16 +163,26 @@ class SpecialReportTests(unittest.TestCase):
             self.assertFalse(scan.called)
             with open(os.path.join(root, 'reports', 'quick_checkup.md')) as stream:
                 report = stream.read()
-            self.assertLess(report.index('## Run Additional Checks'), report.index('## Full Report Workload Estimate'))
+            self.assertNotIn('## Full Report Workload Estimate', report)
+            self.assertLess(report.index('## Results'), report.index('## Run Additional Checks'))
+            self.assertLess(report.index('## Run Additional Checks'), report.index('## Summary'))
+            self.assertLess(report.index('## Summary'), report.index('## Options Used'))
             commands = re.findall(r'```sh\n([^\n]+)\n```', report.split('## Run Additional Checks')[1])
-            self.assertEqual(len(commands), 2)
-            for command in commands:
+            self.assertEqual(commands[0], 'bin/dq --report full_checkup')
+            self.assertEqual(commands[1], 'bin/dq --report full_checkup --rows 1000')
+            self.assertEqual(len(commands[2:]), 1)
+            self.assertIn('### Analyze Specific Fields', report)
+            self.assertNotIn('--action', commands[2])
+            self.assertLess(report.index('## Options Used'), report.index('Configuration:'))
+            self.assertLess(report.index('Configuration:'), report.index('| Option'))
+            for command in commands[2:]:
                 options = build_parser().parse_args(shlex.split(command)[1:])
                 resolve_selection(options, build_parser())
+                self.assertEqual(options.action, 'csv')
                 self.assertIsNone(options.main_url)
                 self.assertEqual(options.config, 'settings file.ini')
-                self.assertEqual(options.exclude_fields, [''])
-                self.assertEqual(options.rows, 1000)
+                self.assertEqual(options.exclude_fields, [])
+                self.assertIsNone(options.rows)
                 self.assertTrue(fnmatch.fnmatchcase(field, options.include_fields[0]))
                 self.assertFalse(fnmatch.fnmatchcase('email anything_t', options.include_fields[0]))
 
@@ -182,18 +195,15 @@ class SpecialReportTests(unittest.TestCase):
                 patch('dq.reports.checkup.field_document_count', return_value=1002), \
                 patch('dq.stored.values', return_value=iter(source)), patch('sys.stdout', io.StringIO()):
             self.assertEqual(main(['--report', 'full_checkup', '--skip_null_values']), 0)
-            with open(os.path.join(root, 'reports', 'notes_t_full_checkup.csv'), newline='') as stream:
+            with open(os.path.join(root, 'reports', 'notes_t_standard_text_composite.csv'), newline='') as stream:
                 rows = list(csv.reader(stream))
             self.assertEqual(len(rows), 1003)
             self.assertEqual(rows[-1][0], '1001')
             self.assertTrue(all(row[1] == 'empty_strings_base: empty string' for row in rows[1:]))
-            with open(os.path.join(root, 'reports', 'notes_t_full_checkup.md')) as stream:
+            with open(os.path.join(root, 'reports', 'full_checkup.md')) as stream:
                 report = stream.read()
-            self.assertIn('Finding rows: 1,002', report)
-            self.assertEqual(report.count('empty_strings_base: empty string'), 100)
-            self.assertNotIn('missing_fields_base: missing or null', report)
-            self.assertIn('Non-null stored values scanned: 1,002', report)
-            self.assertIn('CSV records: 1,002', report)
+            self.assertIn('Value-check finding rows: 1,002', report)
+            self.assertFalse(os.path.exists(os.path.join(root, 'reports', 'notes_t_full_checkup.md')))
 
 
 class ReportLinkTests(unittest.TestCase):
@@ -203,8 +213,11 @@ class ReportLinkTests(unittest.TestCase):
         field = {'name': 'a+b:field'}
         url = solr_query_url('https://solr.example/solr/demo', field, missing=True)
         self.assertEqual(urlsplit(url).scheme, 'https')
+        self.assertIn('/select?q=*:*&', url)
         query = parse_qs(urlsplit(url).query)
-        self.assertEqual(query['rows'], ['10'])
+        self.assertNotIn('rows', query)
+        self.assertNotIn('wt', query)
+        self.assertEqual(query['q'], ['*:*'])
         self.assertEqual(query['dq_field'], [field['name']])
         self.assertEqual(query['fq'], [r'{!lucene}(*:* AND -a\+b\:field:*)'])
         vector = {'name': 'v', 'typeClass': 'solr.DenseVectorField'}

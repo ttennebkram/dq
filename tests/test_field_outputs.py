@@ -48,7 +48,11 @@ class FieldOutputTests(unittest.TestCase):
             email = rows('Email_t')
             self.assertEqual(len(email), 3)  # Header, null, first failure (surrounding whitespace).
             self.assertEqual(email[1], ['001', 'missing_fields_base: missing or null', ''])
+            self.assertEqual(email[2][2], ' \ufffd ')
             self.assertTrue(all(len(row) == 3 for row in email))
+            for field in FIELDS:
+                with open(os.path.join(root, 'reports', field['name'] + '_standard_text_composite.csv'), 'rb') as stream:
+                    self.assertNotIn(b'\r\n', stream.read())
             self.assertEqual([row[2] for row in rows('notes-t')[1:]], [' ', ''])
             self.assertEqual(rows('clean_t'), [['id', 'reason', 'value']])
             listed = out.getvalue().split('Files created:\n')[1].splitlines()
@@ -126,8 +130,9 @@ class FieldOutputTests(unittest.TestCase):
                 paths = ['reports/' + action + '.md']
                 expected = '  ' + paths[0] + '\n'
                 if action == 'full_checkup':
-                    paths += ['reports/' + f['name'] + '_' + action + '.md' for f in FIELDS]
-                    paths += ['reports/' + f['name'] + '_full_checkup.csv' for f in FIELDS]
+                    paths += ['reports/Email_t_email_composite.csv',
+                              'reports/notes-t_standard_text_composite.csv',
+                              'reports/clean_t_standard_text_composite.csv']
                     expected += '\nOther Created Files:\n' + ''.join('  ' + p + '\n' for p in paths[1:])
                 self.assertEqual(out.getvalue().split('Main Report File:\n')[1], expected)
                 self.assertEqual(sorted(os.listdir(os.path.join(root, 'reports'))),
@@ -136,7 +141,7 @@ class FieldOutputTests(unittest.TestCase):
                     overview = stream.read()
                 for relative in paths[1:]:
                     self.assertTrue(os.path.isfile(os.path.join(root, relative)))
-                    self.assertIn('(' + os.path.basename(relative) + ')', overview)
+                    self.assertIn(relative, overview)
 
     def test_report_without_overview_separates_images(self):
         def report(target, path, **options):

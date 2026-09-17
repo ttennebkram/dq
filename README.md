@@ -100,7 +100,7 @@ cd dq
 ### Configuration
 
 The report examples in this Quickstart assume you've already created our
-standard `dq-demo` test collection. Creating it is described in
+standard `dq_demo` test collection. Creating it is described in
 [Generate a Test Collection](#generate-a-test-collection), the section
 directly below this Quickstart.
 To run against your own data, use `--collection NAME` or its synonym
@@ -110,7 +110,7 @@ See [Vocabulary](#vocabulary) for equivalent Solr, Elasticsearch, OpenSearch,
 and DQ terms such as collection/index and document/record.
 
 Start with the wizard to save your connection settings in `dq.ini`. For a new
-setup, it suggests `http://localhost:8983/solr` and collection `dq-demo`, the name
+setup, it suggests `http://localhost:8983/solr` and collection `dq_demo`, the name
 used by the test-data loader. The URL prompt also shows Elasticsearch at
 `http://localhost:9200` and OpenSearch at `http://localhost:9200`, their normal
 local HTTP addresses. Existing
@@ -146,7 +146,7 @@ A minimal file looks like this:
 ```ini
 [dq]
 main_url = http://localhost:8983/solr
-collection = dq-demo
+collection = dq_demo
 ```
 
 The URL may instead include the collection; then omit `collection`. Supplying
@@ -208,102 +208,104 @@ more detail and the `full_checkup` report.
 
 ## Generate a Test Collection
 
-This tool can generate fake/synthetic data and insert it into Solr or ES.
-In this section, **ES means Elasticsearch, including its commercial and
-open-source editions, and OpenSearch**. The default collection/index is named
-`dq-demo`, which the Quickstart examples below assume you're using. If you
-prefer to work with your own data, you can skip this section.
+DQ generates and loads synthetic demo data into the `dq_demo` collection/index in
+Solr or Elasticsearch. Here, ES includes commercial and open-source Elasticsearch
+and OpenSearch. Skip this section to use your own data.
 
-The scripts in `generate-test-collection/` generate test data with fake names,
-addresses, email addresses, phone numbers, SSN-shaped values, dates, and Unicode
-cases, then load it into a test collection or index. See
-[generate-test-collection/README.md](generate-test-collection/README.md) for the
-generation and loading instructions.
+The generated data contains synthetic personal and contact data with some
+deliberately invalid values. Emails use `example.com`, phone numbers use a fictional 555
+range, and SSN-shaped values must never be used as identities.
+`--incorrect_percent` injects some invalid values.
 
-Text fields are stored and indexed with the `_t` suffix.
-Set an incorrect-value percentage with `--incorrect_percent`,
-so that some records will have invalid values.
-This mistake percentage will be applied to all generated fields.
-A separate answer key records each injected defect.
-
-From the main DQ project directory, go to `generate-test-collection/`:
+From the main DQ project directory, go to `generate_test_collection/`:
 
 ```sh
 # in main dq directory
-cd generate-test-collection
+cd generate_test_collection
 ```
 
 ### Solr Example
 
+See also [ES Example](#es-example). The submission script creates the `dq_demo`
+collection if needed. It looks in `../dq.ini` for the server URL and connection
+credentials. For safety, it does not use the collection value from `../dq.ini`.
+To run reports and rules against the demo data once created, do change the
+collection value in `../dq.ini` to `dq_demo`.
 Run the generator without arguments to display syntax and examples. This does
 not generate or overwrite any files:
 
 ```sh
-./generate-test-data-solr.py
+./generate_test_data_solr.py
 ```
 
 On Windows, run the same Python script with the Python launcher:
 
 ```cmd
-py -3 generate-test-data-solr.py
+py -3 generate_test_data_solr.py
 ```
 
 Running with no arguments will show the syntax.
 
 Example: Generate 1,000 records with a 20% incorrect-value setting.
-`--count` is required; 1,000 is a suggested starting size:
+`--rows` is required; `--size` is equivalent, and 1,000 is a suggested starting size:
 
 ```sh
-./generate-test-data-solr.py --count 1_000 --incorrect_percent 20
+./generate_test_data_solr.py --rows 1_000 --incorrect_percent 20
 ```
 
---count can be 1000 or 1_000.  The underscore notation works in this code even with Python 3.4
+`--rows` can be `1000` or `1_000`. The underscore notation works in this code
+even with Python 3.4.
 
 Check the generated Solr data file:
 
 ```sh
-ls -l documents-solr.json
+ls -l documents_solr.json
 ```
 
-The generator writes `documents-solr.json` and `expected-results.json` to the
-current working directory by default.
+The generator writes `documents_solr.json` to the current working directory by
+default.
 There is also a `--data_files_dir` option
-to use a different directory for `documents-solr.json` or `documents-es.ndjson`.
-Reusable setup files and instructions remain in `generate-test-collection/`.
+to use a different directory for `documents_solr.json` or `documents_es.ndjson`.
+Reusable setup files and instructions remain in `generate_test_collection/`.
 Generated JSON is ignored by Git.
 
 Submit the generated records, creating the Solr collection if needed:
 
 ```sh
-./submit-to-solr.py --submit
+./submit_to_solr.py --submit
+```
+
+On Windows:
+
+```cmd
+py -3 submit_to_solr.py --submit
 ```
 
 To remove the old test collection, rebuild it, and load the generated records:
 
 ```sh
-./submit-to-solr.py --recreate_collection
+./submit_to_solr.py --recreate_collection
 ```
 
 Run a quick checkup on the test collection:
 
 ```sh
-../bin/dq --main_url http://localhost:8983/solr --collection dq-demo --report quick_checkup
+../bin/dq --main_url http://localhost:8983/solr --collection dq_demo --report quick_checkup
 ```
 
-The loader finds the parent `dq.ini` automatically. Generated JSON stays in the
-current directory; reports use `reports_dir`.
+Generated JSON stays in the current directory; reports use `reports_dir`.
 
 The loader resubmits matching IDs by default.
 
-**Test-data generation is random by default.** Omit `--seed` for a fresh run;
+Test-data generation is random by default. Omit `--seed` for a fresh run;
 use `--seed N` to reproduce one with the same options and generator/Python
-version. Every chosen seed is printed and saved in `expected-results.json`. Seeds `0`
+version. Every chosen seed is printed. Seeds `0`
 and `-1` are repeatable integer seeds, not special random modes.
 
 For special empty-string tests, enable preservation when submitting:
 
 ```sh
-./submit-to-solr.py --submit --preserve_empty_strings
+./submit_to_solr.py --submit --preserve_empty_strings
 ```
 
 Normally omit this flag: each submission restores standard Solr blank removal
@@ -312,69 +314,79 @@ unless preservation is explicitly requested. No configuration JSON file is neede
 ### ES Example
 
 For Elasticsearch or OpenSearch, stay in the same directory and generate the
-shared ES data file. Run without arguments to display its syntax:
+shared ES data file. The submission script creates the `dq_demo` index if
+needed. It looks in `../dq.ini` for the server URL and connection credentials,
+but, for safety, it does not use the collection/index value from `../dq.ini`.
+To run reports and rules against the demo data once created, do change the
+collection/index value in `../dq.ini` to `dq_demo`.
+Run without arguments to display its syntax:
 
 ```sh
-./generate-test-data-es.py
+./generate_test_data_es.py
 ```
 
 On Windows:
 
 ```cmd
-py -3 generate-test-data-es.py
+py -3 generate_test_data_es.py
 ```
 
 Generate the same 1,000-record, 20%-incorrect fixture in ES format:
 
 ```sh
-./generate-test-data-es.py --count 1_000 --incorrect_percent 20
+./generate_test_data_es.py --rows 1_000 --incorrect_percent 20
 ```
 
 Check the generated ES data file:
 
 ```sh
-ls -l documents-es.ndjson
+ls -l documents_es.ndjson
 ```
 
 Submit the generated records, creating the ES index if needed:
 
 ```sh
-./submit-to-es.py --submit
+./submit_to_es.py --submit
+```
+
+On Windows:
+
+```cmd
+py -3 submit_to_es.py --submit
 ```
 
 To remove the old test index, rebuild it, and load the generated records:
 
 ```sh
-./submit-to-es.py --recreate_index
+./submit_to_es.py --recreate_index
 ```
 
 The same submission command supports OpenSearch. To use the local instance on
 port 9201:
 
 ```sh
-./submit-to-es.py --main_url http://localhost:9201 --submit
+./submit_to_es.py --main_url http://localhost:9201 --submit
 ```
 
 Run the equivalent quick checkup against Elasticsearch:
 
 ```sh
-../bin/dq --main_url http://localhost:9200 --index dq-demo --report quick_checkup
+../bin/dq --main_url http://localhost:9200 --index dq_demo --report quick_checkup
 ```
 
 For OpenSearch on the local test port, change the URL to
 `http://localhost:9201`. ES and OpenSearch preserve empty strings in `_source`
 normally, so they do not need Solr's `--preserve_empty_strings` loader option.
 
-Both engines share `documents-es.ndjson`, `schema-es.json`, and the basic loader
-API logic. Solr uses `documents-solr.json` and `schema-solr.json`.
-See the [test collection quickstart](generate-test-collection/README.md#elasticsearch-and-opensearch-quickstart).
-The shared ES/OpenSearch loader accepts `--main_url`, `--index`, `--data_files_dir`,
+Both engines share `documents_es.ndjson`, `schema_es.json`, and the basic loader
+API logic. Solr uses `documents_solr.json` and `schema_solr.json`.
+The shared ES/OpenSearch loader accepts `--main_url`, `--data_files_dir`,
 `--config`, `--username`, `--password`, `--trust_certificate`, and either
-`--submit` or `--recreate_index`. It reads connection keys from the
-`[elasticsearch]` INI section for either engine; CLI overrides those values.
-A legacy `[opensearch]` section is used only when `[elasticsearch]` is absent.
-With no configured URL, the default is `http://localhost:9200` (9201 for a legacy
-OpenSearch-only section). Use separate INI files when the servers need different credentials.
+`--submit` or `--recreate_index`. It uses the normal DQ connection settings when
+`main_url` identifies Elasticsearch or OpenSearch; CLI options override them.
+If `dq.ini` points to Solr, the ES loader reports the mismatch instead of using
+that target or its credentials. Use separate INI files when servers need
+different connection settings.
 DQ can list fields, run checkups, and apply stored-value rules to these indexes.
 
 ## Automatic Checkup
@@ -389,7 +401,7 @@ bin/dq --report full_checkup --include_field email_t --rows 1_000
 | Report | What It Does | Main Output |
 | ------ | ------------ | ----------- |
 | `quick_checkup` | Counts field presence and suggests rules without fetching stored values. | `reports/quick_checkup.md` |
-| `full_checkup` | Scans stored values and runs the selected rules. | `reports/full_checkup.md`, linked field details, and CSV findings |
+| `full_checkup` | Scans stored values and runs the selected rules. | `reports/full_checkup.md` and per-field CSV findings |
 
 `full_checkup` can be slow on large datasets. Use `--include_fields` to focus on
 critical fields and `--rows` / `--size` to limit test runs. See
@@ -622,7 +634,7 @@ the results.
 | Report          | Output | Description |
 | --------------- | ------ | ----------- |
 | `quick_checkup` | Markdown | Collection-wide presence counts and suggested checks; no stored-value scan. |
-| `full_checkup`  | Markdown and CSV | Runs combined checks and writes field details. **May be slow.** Limit fields with `--include_fields` and documents with `--rows` / `--size`. |
+| `full_checkup`  | Markdown and CSV | Writes one overview and per-field CSV findings. **May be slow.** During testing, limit documents with `--rows` / `--size`; use `--include_fields` to focus on specific fields. |
 
 Run `bin/dq --list_reports` to print this report catalog in the terminal.
 
@@ -721,8 +733,8 @@ action selections are command-line options and are not saved in `dq.ini`.
 | Command                              | What It Does                                                        |
 | ------------------------------------ | ------------------------------------------------------------------- |
 | `--list_fields`                      | List fields, schema properties, and document counts on stdout.      |
-| `--list_collections`                 | List Solr collection names on stdout.                               |
-| `--list_indexes`                     | List Elasticsearch/OpenSearch index names on stdout.                |
+| `--list_collections`                 | List Solr collection names and document counts on stdout.           |
+| `--list_indexes`                     | List Elasticsearch/OpenSearch index names and document counts.      |
 | `--list_reports`                     | List reports, status, and descriptions on stdout.                   |
 | `--list_rules`                       | List rules, Base and Predefined Composite type, and descriptions.   |
 | `--config_wizard` / `--setup_wizard` | Walk through connection settings and save the INI file.             |
@@ -771,10 +783,10 @@ For example, save:
 ```ini
 [DEFAULT]
 main_url = http://localhost:8983/solr
-collection = dq-demo
+collection = dq_demo
 ```
 
-With `dq` on PATH, use the saved `dq-demo` collection:
+With `dq` on PATH, use the saved `dq_demo` collection:
 
 ```sh
 dq --report quick_checkup
@@ -786,7 +798,7 @@ To check another collection, for example `my-files`, override just its name:
 dq --report quick_checkup --collection my-files
 ```
 
-The override applies only to that run; `dq.ini` keeps `dq-demo` as the default.
+The override applies only to that run; `dq.ini` keeps `dq_demo` as the default.
 `--index` is a synonym for `--collection`. Keep `main_url` as the server's base
 URL, as shown above, when supplying the collection separately. If the saved URL
 already includes a collection, override `--main_url` with the desired complete
@@ -900,9 +912,15 @@ launcher can find Python 3:
 py -3 --version
 ```
 
+From the DQ project directory, verify Python and the DQ CLI together:
+
+```bat
+.\bin\verify_python.cmd
+```
+
 If `py` is not recognized, follow Python's [Windows troubleshooting guide](https://docs.python.org/3/using/windows.html#troubleshooting)
 to make the launcher available on PATH. If you already have Python 3 available
-as `python`, you can run `python bin\dq.py` directly instead.
+as `python`, you can run `python bin\dq` directly instead.
 
 ### Run DQ on Windows
 
@@ -919,7 +937,7 @@ Then configure your connection:
 ```
 
 Use `.\bin\dq.cmd` in place of `bin/dq` throughout this README. You can also run
-`py -3 bin\dq.py` directly. The wrapper passes all arguments to DQ, preserves
+`py -3 bin\dq` directly. The wrapper passes all arguments to DQ, preserves
 your working directory, and returns DQ's exit status. It uses `py.exe -3` to
 select Python 3. The wrapper has Windows CRLF line endings;
 execution on Windows has not yet been verified.
@@ -928,21 +946,21 @@ execution on Windows has not yet been verified.
 
 The same `py -3` prefix may be needed for other `.py` scripts shown in this
 README or the scripts' usage messages. For example, from the
-`generate-test-collection` directory, replace `./generate-test-data-solr.py`
+`generate_test_collection` directory, replace `./generate_test_data_solr.py`
 with:
 
 ```bat
-py -3 generate-test-data-solr.py --count 1000
+py -3 generate_test_data_solr.py --rows 1000
 ```
 
 Likewise, submit the generated data with:
 
 ```bat
-py -3 submit-to-solr.py --submit
+py -3 submit_to_solr.py --submit
 ```
 
 Some Python files start with `#!/usr/bin/env python3`, a launcher line used on
-Linux/macOS. Using `py -3 script-name.py` explicitly selects Python 3 on Windows;
+Linux/macOS. Using `py -3 script_name.py` explicitly selects Python 3 on Windows;
 you do not need to edit that line or rely on `.py` file associations.
 
 ## Using HTTPS
@@ -1115,7 +1133,7 @@ for the keystore and server configuration reference.
 
 ### Install the Optional Solr Helper
 
-DQ distributes `solr-auth.py` in [aux-bin/](aux-bin/README.md). Copy it into the
+DQ distributes `solr_auth.py` in [aux-bin/](aux-bin/README.md). Copy it into the
 Solr installation before using it. It is a standalone helper and does not
 require DQ to be installed or remain at its current path.
 
@@ -1124,15 +1142,15 @@ DQ project directory:
 
 ```sh
 mkdir -p ~/dev/solr-9.10.1/local-scripts
-cp aux-bin/solr-auth.py ~/dev/solr-9.10.1/local-scripts/solr-auth.py
-chmod +x ~/dev/solr-9.10.1/local-scripts/solr-auth.py
+cp aux-bin/solr_auth.py ~/dev/solr-9.10.1/local-scripts/solr_auth.py
+chmod +x ~/dev/solr-9.10.1/local-scripts/solr_auth.py
 ```
 
 Alternatively, copy it into Solr's existing `bin/` directory:
 
 ```sh
-cp aux-bin/solr-auth.py ~/dev/solr-9.10.1/bin/solr-auth.py
-chmod +x ~/dev/solr-9.10.1/bin/solr-auth.py
+cp aux-bin/solr_auth.py ~/dev/solr-9.10.1/bin/solr_auth.py
+chmod +x ~/dev/solr-9.10.1/bin/solr_auth.py
 ```
 
 You can also copy it directly into the Solr installation root. The helper
@@ -1141,7 +1159,7 @@ Use `--solr_dir DIR` to specify the installation explicitly when running it
 from elsewhere, including directly from DQ's `aux-bin/`.
 
 Choose one installed location. The examples below use `local-scripts/`; use
-`bin/solr-auth.py` or `./solr-auth.py` instead if you chose another location. After
+`bin/solr_auth.py` or `./solr_auth.py` instead if you chose another location. After
 updating the helper in DQ, repeat the copy to update your installed copy.
 Copying the script does not change authentication or overwrite the saved login.
 The password file is always `local-auth.ini` in the selected Solr installation
@@ -1153,9 +1171,9 @@ The development server normally runs without a login. Use the helper in the Solr
 
 ```sh
 cd ~/dev/solr-9.10.1
-./local-scripts/solr-auth.py status
-./local-scripts/solr-auth.py on
-./local-scripts/solr-auth.py off
+./local-scripts/solr_auth.py status
+./local-scripts/solr_auth.py on
+./local-scripts/solr_auth.py off
 ```
 
 On the first `on`, the helper prompts for a username and password and saves them
@@ -1165,7 +1183,7 @@ the saved login for next time. This is separate from the certificate keystore
 password. To replace the saved login, first turn authentication off, then run:
 
 ```sh
-./local-scripts/solr-auth.py on --set_credentials
+./local-scripts/solr_auth.py on --set_credentials
 ```
 
 The helper passes the saved login to Solr's native `--credentials` option, so it
@@ -1180,8 +1198,8 @@ SolrCloud applies security changes live through ZooKeeper, so a restart is
 normally unnecessary. To explicitly restart as part of the switch:
 
 ```sh
-./local-scripts/solr-auth.py on --restart
-./local-scripts/solr-auth.py off --restart
+./local-scripts/solr_auth.py on --restart
+./local-scripts/solr_auth.py off --restart
 ```
 
 The helper lives in the Solr installation's `local-scripts/` directory and targets
@@ -1274,6 +1292,9 @@ Required software:
 
 Dependencies: No runtime or development dependencies; DQ uses only the Python standard library.
 
+Verify the configured Python command and load the DQ CLI with
+`bin/verify_python.sh` on macOS/Linux or `bin\verify_python.cmd` on Windows.
+
 ### Tested Search Engines
 
 This version has been tested with:
@@ -1284,9 +1305,82 @@ This version has been tested with:
 | Apache Solr | 10.0.0 |
 | Elasticsearch | 9.5.3 |
 | OpenSearch | 3.8.0 |
+| Java runtime for Solr | Eclipse Temurin OpenJDK 21.0.5 LTS |
 
-The `full_checkup` performance estimates use one-million-document measurements
-from these versions on a MacBook Pro M4.
+README rendering, internal links, and navigation are checked with
+[Markd 1.0](https://github.com/chathurank/Markd) on macOS.
+
+The short `full_checkup` performance estimate under **Run Additional Checks**
+uses one-million-document measurements from these versions on a MacBook Pro M4.
+
+Completed stored-value scans append measurements to
+`reports/processing-stats.jsonl`. This history does **not** currently update the
+`quick_checkup` estimates dynamically. To change the estimates, update
+`FULL_CHECKUP_BENCHMARKS` near the top of `src/dq/reports/checkup.py` using
+representative measurements for each engine family.
+
+### Synthetic Test Value Generation
+
+The scripts in `generate_test_collection/` create the same logical records for
+Solr, Elasticsearch, and OpenSearch. Each field starts with a valid synthetic
+value. The generator then independently selects `--incorrect_percent` of that
+field's records and distributes them across several defect types. Selection is
+random by default; `--seed` makes a run repeatable.
+
+At `--incorrect_percent 20`, format-specific fields receive 3% null values, 3%
+blank values, 3% values with leading and/or trailing whitespace, and 11%
+nonblank failures generated by the applicable rule package. Other percentages
+use the same proportions, subject to rounding.
+
+Ordinary text fields keep Unicode corruption rare: approximately 0.1% of all
+records at the standard 20% setting. The remaining selected records are divided
+among null, blank, and the readable whitespace examples. Small generated sets
+contain at least one Unicode example so the rule can still be demonstrated.
+
+Text fields receive null values, empty strings, whitespace-only
+strings, leading or trailing whitespace, and malformed values. The three
+nonblank whitespace examples are ` leading whitespace example`,
+`trailing whitespace example `, and ` leading and trailing whitespace example `.
+Malformed general text rotates through six combinations of suspicious Unicode
+characters. Each combination spans at least three flagged code-point buckets,
+which is the failure threshold used by `code_points_base`. The combinations use
+replacement, format, private-use, and control characters. Format-specific
+fields instead rotate through several violations of their expected format.
+
+| Generated field(s) | Valid example | Invalid-value variety | Rule exercised |
+| ------------------ | ------------- | --------------------- | -------------- |
+| Names, street, city, state, postal code, country, notes | `DemoName7`, `7 Example Street`, `Example City` | Null, blank, surrounding whitespace, and six Unicode combinations spanning at least three flagged code-point buckets | `standard_text_composite` |
+| `email_t` | `demo7@example.com` | Missing `@`, missing dotted domain, double `@`, consecutive dots, embedded space, or invalid domain label | `email_composite` |
+| `phone_t` | `212-555-0107` | Too few or too many digits, invalid area/exchange prefix, unmatched parenthesis, or slash separators | `us_phone_composite` |
+| `ssn_t` | `123-45-1007` | Invalid area/group/serial values or invalid/missing separators | `ssn_composite` |
+| `part_number_s` | `PRT-000007` | Missing/wrong separator, letters in the prefix, wrong digit count, or extra suffix | `part_number_example_composite` when selected explicitly |
+| `event_date_dt` | `2024-01-15T00:00:00Z` | Missing/null plus varied extreme future dates | `missing_fields_base`; future-date analysis is outside the MVP |
+
+For example, a generated name may contain a combination of `U+FFFD REPLACEMENT
+CHARACTER`, `U+200B ZERO WIDTH SPACE`, and a private-use character. An email may
+be `demo7.example.com`. Nonblank bogus part numbers include `PRT000007`,
+`P1T-000007`, `PRT-00007`, `PRT-000007-X`, `PRT_000007`, and `PART-000007`.
+The generated JSON contains the actual Unicode characters; the names above make
+otherwise invisible defects clear.
+
+Rule-specific value generation is enabled for the MVP. Making it optional is
+deferred until after the MVP.
+
+Generation code is in
+`generate_test_collection/data_generator_common.py`. Focused generator tests
+are in `tests/test_demo_generator.py`. The user instructions and commands for
+creating `dq_demo` remain in **Generate a Test Collection** above.
+
+### Full Checkup Processing Details
+
+* Per-field CSV files use `id,reason,value`; a header-only file has no findings.
+* Rules run in order and export the first failure for each value. A single-valued
+  field produces at most one finding per document; arrays can produce one for
+  each failing value.
+* `--skip_null_values` omits null findings. Native date and vector fields run
+  `missing_fields_base` only in the MVP.
+* Unicode results depend on Python's Unicode database, and Regex rules validate
+  syntax rather than identity or deliverability. A scan is not a snapshot.
 
 ### Project Directory Tree
 
@@ -1298,8 +1392,9 @@ The main project directories and files are:
 | <nobr><code>├── aux-bin/</code></nobr> | Optional helper scripts for managing a local Solr installation. |
 | <nobr><code>├── bin/</code></nobr> | DQ command-line launchers for macOS, Linux, and Windows. |
 | <nobr><code>├── docs/</code></nobr> | Additional reference material. In this version, most documentation is in the main `README.md` file. |
-| <nobr><code>├── generate-test-collection/</code></nobr> | Generates fake test data and submits it to Solr, Elasticsearch, or OpenSearch. |
+| <nobr><code>├── generate_test_collection/</code></nobr> | Generates fake test data and submits it to Solr, Elasticsearch, or OpenSearch. |
 | <nobr><code>├── reports/</code></nobr> | Default destination for generated Markdown and CSV output. |
+| <nobr><code>│   └── processing-stats.jsonl</code></nobr> | Append-only JSON Lines history of scan measurements, including the engine, fields, document count, elapsed time, and processing rate. It is generated at runtime and ignored by Git. |
 | <nobr><code>├── src/</code></nobr> | Python source tree. |
 | <nobr><code>│   └── dq/</code></nobr> | Main Python package. |
 | <nobr><code>│       ├── reports/</code></nobr> | Special report packages and shared report formatting. |

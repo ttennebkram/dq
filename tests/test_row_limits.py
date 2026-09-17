@@ -210,7 +210,7 @@ class ReportLimitTests(unittest.TestCase):
                         patch('sys.stdout', io.StringIO()):
                     self.assertEqual(main(['--report', 'full_checkup', '--reports_dir', directory] + args), 0)
                 self.assertEqual(scan.call_args[1]['row_limit'], expected)
-                with open(os.path.join(directory, 'email_s_full_checkup.md')) as stream:
+                with open(os.path.join(directory, 'full_checkup.md')) as stream:
                     report = stream.read()
                 self.assertIn('rows = ' + str(expected), report)
                 self.assertTrue(any('rows' in line and source in line for line in report.splitlines()))
@@ -227,7 +227,7 @@ class ReportLimitTests(unittest.TestCase):
             with open(path) as stream:
                 report = stream.read()
             self.assertIn('Documents: 1,000', report)
-            self.assertIn('Documents to scan: 3', report)
+            self.assertIn('to scan up to 3 records and all selected fields', report)
             self.assertIn('Presence counts cover the entire collection', report)
             self.assertIn('100', report)
 
@@ -241,11 +241,11 @@ class ReportLimitTests(unittest.TestCase):
                     patch('dq.stored.get_json', side_effect=responses) as get, patch('sys.stdout', io.StringIO()):
                 load_handler('full_checkup', 'report')('url', path, row_limit=1)
             self.assertEqual(get.call_count, 2)
-            for filename in ('full_checkup.md', 'email_s_full_checkup.md'):
-                with open(os.path.join(directory, filename)) as stream:
-                    report = stream.read()
-                self.assertIn('at most 1 documents', report)
-                self.assertIn('Presence counts cover the entire collection', report)
+            with open(os.path.join(directory, 'full_checkup.md')) as stream:
+                report = stream.read()
+            self.assertIn('at most 1 documents', report)
+            self.assertNotIn('Presence counts cover the entire collection', report)
+            self.assertFalse(os.path.exists(os.path.join(directory, 'email_s_full_checkup.md')))
             with open(path) as stream:
                 self.assertIn('10', stream.read())
 

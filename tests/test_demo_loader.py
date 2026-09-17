@@ -6,39 +6,58 @@ import runpy
 import unittest
 from unittest.mock import Mock, patch
 
-loader = runpy.run_path(os.path.join(os.path.dirname(__file__), '..', 'generate-test-collection', 'submit-to-solr.py'))
+loader = runpy.run_path(os.path.join(os.path.dirname(__file__), '..', 'generate_test_collection', 'submit_to_solr.py'))
 prepare = loader['prepare_collection']
+solr_base = loader['solr_base']
 
 
 class DemoLoaderTests(unittest.TestCase):
+    def test_elasticsearch_url_is_rejected(self):
+        config = type('Config', (), {'main_url': 'http://localhost:9200'})()
+        with self.assertRaisesRegex(ValueError, 'must identify Solr'):
+            solr_base(config)
+
+    def test_configured_collection_is_ignored(self):
+        config = type('Config', (), {
+            'main_url': 'http://localhost:8983/solr',
+            'collection': 'production'})()
+        self.assertEqual(solr_base(config), 'http://localhost:8983/solr')
+
+        config.main_url = 'http://localhost:8983/solr/production'
+        config.collection = None
+        self.assertEqual(solr_base(config), 'http://localhost:8983/solr')
+
     def test_existing_collection_is_not_modified(self):
-        get = Mock(side_effect=[{'collections':['dq-demo']}, {'configSets':['dq-demo']}])
+        get = Mock(side_effect=[{'collections':['dq_demo']}])
         with patch.dict(prepare.__globals__, get_json=get):
             self.assertFalse(prepare('url', None))
-        self.assertEqual([c[1]['action'] for c in get.call_args_list], ['LIST', 'LIST'])
+        self.assertEqual([c[1]['action'] for c in get.call_args_list], ['LIST'])
 
     def test_recreate_deletes_then_creates_only_demo(self):
-        get = Mock(side_effect=[{'collections':['dq-demo','my-files']}, {'configSets':['dq-demo']},
-            {'cluster':{'collections':{'dq-demo':{'configName':'dq-demo'}, 'my-files':{'configName':'other'}}}}, {}, {}, {}, {}])
+        get = Mock(side_effect=[{'collections':['dq_demo','my-files']}, {'configSets':['dq_demo']},
+            {'cluster':{'collections':{'dq_demo':{'configName':'dq_demo'}, 'my-files':{'configName':'other'}}}}, {}, {}, {}])
         with patch.dict(prepare.__globals__, get_json=get):
             self.assertTrue(prepare('url', None, True))
         calls = get.call_args_list[3:]
-        self.assertEqual([c[1]['action'] for c in calls], ['DELETE','DELETE','CREATE','CREATE'])
-        self.assertTrue(all(c[1]['name']=='dq-demo' for c in calls))
+        self.assertEqual([c[1]['action'] for c in calls], ['DELETE','DELETE','CREATE'])
+        self.assertTrue(all(c[1]['name']=='dq_demo' for c in calls))
+        self.assertNotIn('collection.configName', calls[-1][1])
 
     def test_shared_configset_refused_before_delete(self):
-        get = Mock(side_effect=[{'collections':['dq-demo']}, {'configSets':['dq-demo']},
-            {'cluster':{'collections':{'other':{'configName':'dq-demo'}}}}])
+        get = Mock(side_effect=[{'collections':['dq_demo']}, {'configSets':['dq_demo']},
+            {'cluster':{'collections':{'other':{'configName':'dq_demo'}}}}])
         with patch.dict(prepare.__globals__, get_json=get):
             with self.assertRaises(ValueError):
                 prepare('url', None, True)
         self.assertFalse(any(c[1]['action']=='DELETE' for c in get.call_args_list))
 
     def test_missing_collection_created(self):
-        get = Mock(side_effect=[{'collections':['my-files']}, {'configSets':['_default']}, {}, {}])
+        get = Mock(side_effect=[{'collections':['my-files']}, {'configSets':['_default']},
+            {'cluster':{'collections':{'my-files':{'configName':'other'}}}}, {}])
         with patch.dict(prepare.__globals__, get_json=get):
             self.assertTrue(prepare('url', None))
-        self.assertEqual([c[1]['action'] for c in get.call_args_list], ['LIST','LIST','CREATE','CREATE'])
+        self.assertEqual([c[1]['action'] for c in get.call_args_list], ['LIST','LIST','CLUSTERSTATUS','CREATE'])
+        self.assertNotIn('collection.configName', get.call_args_list[-1][1])
 
 
     def test_no_arguments_only_show_usage(self):
@@ -60,9 +79,9 @@ class DemoLoaderTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             with patch('sys.stdout', io.StringIO()) as output:
                 loader['describe_data_file'](directory)
-            self.assertIn(os.path.join(directory, 'documents-solr.json'), output.getvalue())
+            self.assertIn(os.path.join(directory, 'documents_solr.json'), output.getvalue())
             self.assertIn('Exists: no', output.getvalue())
-            with open(os.path.join(directory, 'documents-solr.json'), 'w') as stream:
+            with open(os.path.join(directory, 'documents_solr.json'), 'w') as stream:
                 stream.write('[]')
             with patch('sys.stdout', io.StringIO()) as output:
                 loader['describe_data_file'](directory)

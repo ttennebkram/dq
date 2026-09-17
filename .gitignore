@@ -22,11 +22,10 @@ dq.ini
 .DS_Store
 
 # Generated synthetic data (in cwd or a chosen output directory).
-documents-solr.json
-expected-results.json
+documents_solr.json
 
 # Shared Elasticsearch/OpenSearch bulk payload.
-documents-es.ndjson
+documents_es.ndjson
 
 # Local planning and machine-specific search-engine setup notes.
 /docs/mvp-video.md

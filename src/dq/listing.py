@@ -1,6 +1,6 @@
 """Standard-output field listing."""
 from dq.field_selection import select_fields
-from dq.search import list_fields, list_collections, engine_name
+from dq.search import list_fields, list_collection_counts, engine_name
 from dq.limits import PRESENCE_SCOPE
 from dq.registry import report_catalog, rule_catalog
 
@@ -38,18 +38,22 @@ def print_rules():
 
 def print_collections(target, noun='collections', configuration_path=None,
                       configuration_explicit=False, connection=None):
-    names = list_collections(target, connection=connection)
+    counts = list_collection_counts(target, connection=connection)
     print('{0} server: {1}'.format(engine_name(target), target.rstrip('/')))
     if configuration_path is not None:
         source = 'specified by --config' if configuration_explicit else 'default configuration'
         print('Configuration: {0} ({1})'.format(configuration_path, source))
-    print('{0}: {1}'.format(noun.title(), len(names)))
+    print('{0}: {1}'.format(noun.title(), len(counts)))
     print()
     heading = 'COLLECTION' if noun == 'collections' else 'INDEX'
-    print(heading)
-    print('-' * len(heading))
-    for name in names:
-        print(name)
+    rows = [(name, '{0:,}'.format(count)) for name, count in counts]
+    name_width = max([len(heading)] + [len(name) for name, _ in rows])
+    count_heading = 'DOCUMENTS'
+    count_width = max([len(count_heading)] + [len(count) for _, count in rows])
+    print('{0}  {1}'.format(heading.ljust(name_width), count_heading.rjust(count_width)))
+    print('{0}  {1}'.format('-' * name_width, '-' * count_width))
+    for name, count in rows:
+        print('{0}  {1}'.format(name.ljust(name_width), count.rjust(count_width)))
 
 
 def print_fields(target, *, include=(), exclude=(), configuration_path=None,

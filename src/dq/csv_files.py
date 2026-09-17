@@ -12,7 +12,7 @@ class FieldCsvFiles:
         self.pending = []
         for path in paths.values():
             with open(path, 'w', encoding='utf-8', newline='') as stream:
-                csv.writer(stream, lineterminator='\r\n').writerow(header)
+                csv.writer(stream, lineterminator='\n').writerow(header)
 
     def write_page(self, rows):
         grouped = OrderedDict()
@@ -20,7 +20,7 @@ class FieldCsvFiles:
             grouped.setdefault(finding_field(row, self.paths), []).append(row)
         for name, group in grouped.items():
             with open(self.paths[name], 'a', encoding='utf-8', newline='') as stream:
-                writer = csv.writer(stream, lineterminator='\r\n')
+                writer = csv.writer(stream, lineterminator='\n')
                 for row in group:
                     writer.writerow(row)
                     self.written += 1

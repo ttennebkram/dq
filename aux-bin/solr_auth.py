@@ -86,7 +86,7 @@ def main(argv=None):
     # Backup directories and CLI-generated credential files are owner-only.
     previous_umask = os.umask(0o077)
     try:
-        with tempfile.TemporaryDirectory(prefix='solr-auth-') as temporary:
+        with tempfile.TemporaryDirectory(prefix='solr_auth-') as temporary:
             security_file = os.path.join(temporary, 'security.json')
             security = read_security(solr, directory, zk_host, security_file)
             authentication = security.get('authentication') or {}
@@ -133,10 +133,10 @@ def main(argv=None):
                 print('SolrCloud applies the security change live; no restart requested.')
         return 0
     except subprocess.CalledProcessError:
-        print('solr-auth: Solr command failed; saved configuration backups are retained.', file=sys.stderr)
+        print('solr_auth: Solr command failed; saved configuration backups are retained.', file=sys.stderr)
         return 1
     except (OSError, ValueError, configparser.Error) as error:
-        print('solr-auth: {0}'.format(error), file=sys.stderr)
+        print('solr_auth: {0}'.format(error), file=sys.stderr)
         print('Solr and its embedded ZooKeeper must be running. Any saved backup is retained.', file=sys.stderr)
         return 1
     finally:

@@ -3,7 +3,7 @@ import json
 import re
 from fnmatch import fnmatchcase
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 from urllib.request import Request
 from dq.connection import Connection
 
@@ -93,6 +93,13 @@ def list_collections(solr_url, connection=None):
     if not isinstance(collections, list) or not all(isinstance(name, str) for name in collections):
         raise SolrError('Solr Collections API response did not contain a collections list')
     return sorted(collections)
+
+
+def list_collection_counts(solr_url, connection=None):
+    """Return sorted collection names with their active document counts."""
+    return [(name, collection_document_count(
+        solr_url.rstrip('/') + '/' + quote(name, safe=''), connection=connection))
+            for name in list_collections(solr_url, connection=connection)]
 
 
 def list_fields(collection_url, *, include_counts=True, connection=None):

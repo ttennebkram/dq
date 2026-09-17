@@ -149,8 +149,11 @@ match_mode = partial
 
     def test_unicode_indicators(self):
         self.assertEqual(reasons('café 日本語\n\t'), [])
-        self.assertEqual(len(reasons('\ufffd\ufffd\x00')), 2)
-        self.assertTrue(reasons('\u200b'))
+        self.assertEqual(reasons('\ufffd\ufffd\x00'), [])
+        result = reasons('\ufffd\u200b\ue000')
+        self.assertIn('3 suspicious code-point buckets', result[0])
+        self.assertEqual(len(result), 4)
+        self.assertEqual(reasons('\u200b'), [])
 
     def test_dates_and_histogram(self):
         self.assertEqual(parse_date('2024-01-01T01:00:00+01:00').isoformat(), '2024-01-01T00:00:00')

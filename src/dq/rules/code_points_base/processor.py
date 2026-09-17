@@ -7,12 +7,25 @@ from dq.errors import ReportError
 
 
 def reasons(value):
-    found = set()
+    found = []
+    buckets = set()
     for char in value:
         category = unicodedata.category(char)
         if char == '\ufffd' or category in ('Cs', 'Co', 'Cn', 'Cf') or (category == 'Cc' and char not in '\t\r\n'):
-            found.add('U+{0:04X} {1} ({2})'.format(ord(char), unicodedata.name(char, 'UNNAMED'), category))
-    return sorted(found)
+            bucket = {
+                'Cs': 'surrogate', 'Co': 'private-use', 'Cn': 'unassigned',
+                'Cf': 'format', 'Cc': 'control',
+            }.get(category, 'replacement')
+            if char == '\ufffd':
+                bucket = 'replacement'
+            buckets.add(bucket)
+            found.append('U+{0:04X} {1} ({2})'.format(
+                ord(char), unicodedata.name(char, 'UNNAMED'), category))
+    if len(buckets) < 3:
+        return []
+    summary = '{0} suspicious code-point buckets: {1}'.format(
+        len(buckets), ', '.join(sorted(buckets)))
+    return [summary] + sorted(set(found))
 
 
 def findings(target, selected, connection=None, row_limit=-1, scan_progress=None, skip_null_values=False):

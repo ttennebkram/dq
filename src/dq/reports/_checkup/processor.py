@@ -16,6 +16,11 @@ CHECKS = BASE_CHECKS + ('standard_text_composite', 'email_composite',
                         'us_phone_composite', 'ssn_composite')
 
 
+class ScanResults(dict):
+    """Per-field results with the completed source-document count."""
+    documents_checked = 0
+
+
 def expanded_checks(checks):
     composite_checks = ('standard_text_composite', 'email_composite',
                         'us_phone_composite', 'ssn_composite')
@@ -66,12 +71,14 @@ def plan(field):
 
 def scan(target, fields, plans, connection=None, progress=None, total=None, row_limit=-1, scan_progress=None, skip_null_values=False, on_finding=None):
     presets = definitions()
-    results = dict((f['name'], {'values': 0, 'text_values': 0, 'counts': Counter(),
-                               'examples': []}) for f in fields)
-    selected = [f for f in fields if set(expanded_checks(plans[f['name']])) - {'missing_fields_base'}]
-    if not selected:
+    results = ScanResults((f['name'], {'values': 0, 'text_values': 0, 'counts': Counter(),
+                                      'examples': []}) for f in fields)
+    selected = [f for f in fields if expanded_checks(plans[f['name']])]
+    if not selected or total == 0:
         return results
     documents = [0]
+    documents_seen = 0
+    last_identifier = [None]
     values_seen = 0
     def page_progress(phase, count):
         documents[0] = count
@@ -86,7 +93,11 @@ def scan(target, fields, plans, connection=None, progress=None, total=None, row_
             (field['name'], [name for name in expanded_checks(plans[field['name']])
                              if name != 'missing_fields_base'])
             for field in selected)
+        scan_progress.show_fields = False
     for identifier, name, value in stored.values(target, selected, connection, progress=page_progress, include_null=True, row_limit=row_limit, scan_progress=scan_progress):
+        if identifier != last_identifier[0]:
+            documents_seen += 1
+            last_identifier[0] = identifier
         values_seen += 1
         result = results[name]
         result['values'] += int(value is not None)
@@ -109,9 +120,10 @@ def scan(target, fields, plans, connection=None, progress=None, total=None, row_
                                           '' if value is None else stored.text(value))))
             if len(result['examples']) < 100:
                 result['examples'].append((identifier[:500], check + ': ' + reason, stored.text(value)[:500]))
-    completed_documents = documents[0]
+    completed_documents = max(documents[0], documents_seen)
     if scan_progress and scan_progress.measurements:
         completed_documents = scan_progress.measurements[-1]['records_checked']
+    results.documents_checked = completed_documents
     if progress:
         progress.update('stored-value scan complete: {0:,} documents; {1:,} stored values'.format(
             completed_documents, values_seen), force=True)

@@ -53,7 +53,8 @@ class CompositionTests(unittest.TestCase):
         result = value_reasons(' \ufffd ')
         self.assertTrue(result[0].startswith('surrounding_whitespace_base:'))
         self.assertEqual(len(result), 1)
-        self.assertTrue(value_reasons('\ufffd')[0].startswith('code_points_base:'))
+        self.assertTrue(value_reasons('\ufffd\u200b\ue000')[0].startswith('code_points_base:'))
+        self.assertEqual(value_reasons('\ufffd\ue000'), [])
         with patch('dq.rules._text.processor.reasons') as unicode:
             expected = [(None, 'missing_fields_base: missing or null'),
                         ('', 'empty_strings_base: empty string'),
@@ -87,7 +88,8 @@ class CompositionTests(unittest.TestCase):
 
     def test_code_points_base_standalone_is_unicode_only(self):
         with patch('dq.rules.code_points_base.processor.fields', return_value=[{'name':'id'}]), \
-             patch('dq.stored.values',return_value=iter([('1','id',''),('2','id',' x '),('3','id','\ufffd')])) as fetch:
+             patch('dq.stored.values',return_value=iter([
+                 ('1','id',''),('2','id',' x '),('3','id','\ufffd\u200b\ue000')])) as fetch:
             _, pages = load_handler('code_points_base','csv')('url',include=['id'])
             rows = [row for page in pages for row in page]
         self.assertEqual(fetch.call_count,1)
@@ -96,16 +98,17 @@ class CompositionTests(unittest.TestCase):
 
 
 class DateMvpTests(unittest.TestCase):
-    def test_native_dates_are_presence_only(self):
+    def test_native_dates_run_missing_fields_base_only(self):
         from dq.reports._checkup.processor import plan
         for name in ('event_date_dt', 'email_date', 'ssn_date'):
             field = {'name': name, 'type': 'pdate', 'typeClass': 'solr.DatePointField'}
             checks = plan(field)
             self.assertEqual(list(checks), ['missing_fields_base'])
-            with patch('dq.stored.values') as fetch:
+            with patch('dq.stored.values', return_value=iter([
+                    ('missing', name, None), ('present', name, '2024-01-01T00:00:00Z')])) as fetch:
                 result = scan('url', [field], {name: checks})[name]
-            self.assertFalse(fetch.called)
-            self.assertEqual(sum(result['counts'].values()), 0)
+            self.assertTrue(fetch.called)
+            self.assertEqual(result['counts']['missing_fields_base'], 1)
 
     def test_date_checker_is_deferred_for_both_actions(self):
         from dq.errors import ReportError

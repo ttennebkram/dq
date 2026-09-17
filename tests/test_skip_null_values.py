@@ -16,7 +16,7 @@ from dq.rules._text.processor import value_reasons
 
 
 FIELDS = [{'name': 'email_t', 'type': 'string', 'stored': True}]
-VALUES = [None, '', ' \t', ' x ', '\ufffd', 'bad', 'ok@example.com']
+VALUES = [None, '', ' \t', ' x ', '\ufffd\u200b\ue000', 'bad', 'ok@example.com']
 SOURCE = [(str(i), 'email_t', value) for i, value in enumerate(VALUES)]
 
 
@@ -97,9 +97,11 @@ class NullFilterTests(unittest.TestCase):
                     patch('dq.reports.checkup.field_document_count', return_value=6), \
                     patch('dq.stored.values', return_value=iter(SOURCE)), patch('sys.stdout', io.StringIO()):
                 self.assertEqual(main(['--report', action, '--skip_null_values']), 0)
-                with open(os.path.join(root, 'reports', 'email_t_' + action + '.md')) as stream:
+                with open(os.path.join(root, 'reports', action + '.md')) as stream:
                     report = stream.read()
-                self.assertNotIn('missing_fields_base: missing or null', report)
-                self.assertIn('empty_strings_base: empty string', report)
-                self.assertIn('whitespace_only_base: whitespace-only string', report)
                 self.assertTrue(any('skip_null_values' in line and 'true' in line and 'command line' in line for line in report.splitlines()))
+                with open(os.path.join(root, 'reports', 'email_t_email_composite.csv')) as stream:
+                    findings = stream.read()
+                self.assertNotIn('missing_fields_base: missing or null', findings)
+                self.assertIn('empty_strings_base: empty string', findings)
+                self.assertIn('whitespace_only_base: whitespace-only string', findings)

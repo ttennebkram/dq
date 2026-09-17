@@ -19,7 +19,7 @@ bin/dq --config_wizard --config targets.ini
 The wizard uses command-line settings first, then existing values in the
 destination file. It does not inherit environment variables or other discovered
 config files. For a new file, the suggested URL is `http://localhost:8983/solr` and the
-collection is `dq-demo`, matching the test-data loader. The URL prompt also
+collection is `dq_demo`, matching the test-data loader. The URL prompt also
 shows separate Elasticsearch and OpenSearch examples. Both use
 `http://localhost:9200`, because both engines normally use HTTP port 9200.
 The Solr suggestions apply only when no CLI or saved value is available.
@@ -281,31 +281,28 @@ report uses it when estimating the full report's workload.
 ## Checkup Reports
 
 `quick_checkup` writes one Markdown report containing field-presence counts,
-suggested rules, focused follow-up commands, and an estimate of the full-checkup
-workload. It does not fetch stored values or create CSV files. **Presence check
+suggested rules, focused follow-up commands, and a short full-checkup performance
+estimate. It does not fetch stored values or create CSV files. **Presence check
 only** means a field receives document counts; **Disabled** means its checks were
 turned off in the configuration.
 
-`full_checkup` scans stored values once across all selected fields. It writes an
-overview, a detail report for each field, and
-`<FIELD_NAME>_full_checkup.csv` for fields with stored-value checks. Detail reports
-retain up to 100 examples; CSV files retain all findings with complete IDs and
-values. A field with no findings gets a header-only CSV. Presence-only fields do
-not get CSV files. Keep these supporting files with the overview when sharing it.
+`full_checkup` scans stored values once across all selected fields. It writes one
+overview and `<FIELD_NAME>_<RULE_NAME>.csv` for fields with stored-value checks.
+CSV files retain all findings with complete IDs and values. A field with no
+findings gets a header-only CSV. Fields whose only rule is `missing_fields_base`
+get `<FIELD_NAME>_missing_fields_base.csv`. Keep these supporting files with the
+overview when sharing it.
 
-Missing counts use separate Solr field-existence queries and remain
-collection-wide when `--rows` limits the value scan. Multivalued fields are
-expanded; counts represent finding rows rather than distinct documents. DQ
-reports only the first failed base rule for each value. Concurrent index changes
-can affect results because a checkup is not a snapshot.
+All full-checkup findings come from the row-by-row scan and therefore obey
+`--rows` / `--size`. Multivalued fields are expanded; counts represent finding
+rows rather than distinct documents. DQ reports only the first failed base rule
+for each value. Concurrent index changes can affect results because a checkup is
+not a snapshot.
 
-The quick report's workload estimate covers all selected fields together. Actual
-full-checkup time varies with field sizes, selected fields, server load, and
-network speed. Use `--include_fields` to focus the scan and `--rows` / `--size`
-to limit source documents during testing. Each timing line identifies its engine
-and uses only a benchmark recorded for that engine. If DQ has no benchmark for
-the current engine, the unavailable message names that engine instead of reusing
-another engine's timing range.
+The short performance estimate under **Run Additional Checks** covers all
+selected fields. Use `--include_fields` to focus the scan and `--rows` / `--size`
+to limit documents. The estimate uses only a benchmark recorded for the current
+engine; actual time varies.
 
 ## Scan Progress
 

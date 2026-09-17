@@ -86,7 +86,7 @@ assert 'dq.rules.missing_fields_base.processor' not in sys.modules
                     self.assertEqual(main(['--rule', 'sample_base']), 0)
                     self.assertEqual(out.getvalue(), '\nFiles created:\n  reports/field_t_sample_base.csv (2 data records; header not counted)\n')
                     with open(os.path.join(directory, 'reports', 'field_t_sample_base.csv'), newline='') as stream:
-                        self.assertEqual(stream.read(), 'id\r\none\r\ntwo\r\n')
+                        self.assertEqual(stream.read(), 'id\none\ntwo\n')
                     self.assertIn('Offending records exported: 2', err.getvalue())
                     with patch('dq.rules.sample_base.CSV', None):
                         with self.assertRaises(ReportError):
@@ -113,6 +113,6 @@ assert 'dq.rules.missing_fields_base.processor' not in sys.modules
             self.assertEqual(error.exception.code, 2)
             self.assertEqual(out.getvalue(), '')
             with open(os.path.join(directory, 'field_t_missing_fields_base.csv'), newline='') as stream:
-                self.assertEqual(stream.read(), 'id\r\none\r\n')
+                self.assertEqual(stream.read(), 'id\none\n')
             self.assertIn('export incomplete (1 CSV records written)', err.getvalue())
             self.assertNotIn('Wrote CSV:', err.getvalue())

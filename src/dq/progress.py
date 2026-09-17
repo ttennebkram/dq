@@ -31,6 +31,7 @@ class ScanProgress:
         self.every = progress_interval(every)
         self.kind = kind
         self.field_rules = None
+        self.show_fields = True
         self.stream = stream if stream is not None else sys.stdout
         self.active = False
         self.measurements = []
@@ -48,11 +49,12 @@ class ScanProgress:
             frequency = 'one dot per {0:,} records, shared across all listed fields'.format(self.every)
         else:
             frequency = 'one dot per {0:,} {1}'.format(self.every, unit)
-        for field in fields:
-            labels = ((self.field_rules or {}).get(field) or self.labels)
-            label_kind = 'rules' if self.kind == 'rule' or self.field_rules is not None else self.kind
-            print('Field: {0}; {1}: {2}'.format(field, label_kind, ', '.join(labels)),
-                  file=self.stream, flush=True)
+        if self.show_fields:
+            for field in fields:
+                labels = ((self.field_rules or {}).get(field) or self.labels)
+                label_kind = 'rules' if self.kind == 'rule' or self.field_rules is not None else self.kind
+                print('Field: {0}; {1}: {2}'.format(field, label_kind, ', '.join(labels)),
+                      file=self.stream, flush=True)
         print('Progress: {0}'.format(frequency), file=self.stream, flush=True)
 
     def update(self, count):

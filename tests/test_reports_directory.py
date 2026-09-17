@@ -68,7 +68,7 @@ class OutputFileTests(unittest.TestCase):
                     self.assertEqual(main(['--rule', 'email_composite', '--action', 'csv']), 0)
                 self.assertNotIn('Created reports directory:', err.getvalue())
                 with open(path, newline='') as stream:
-                    self.assertEqual(stream.read(), 'id,reason,value\r\n')
+                    self.assertEqual(stream.read(), 'id,reason,value\n')
                 with open(markdown) as stream:
                     self.assertEqual(stream.read(), 'keep report')
 

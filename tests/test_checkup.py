@@ -36,7 +36,8 @@ class CheckupTests(unittest.TestCase):
     def test_one_scan_filtered_fields_and_links(self):
         fields=[{'name':'email_s','stored':True,'typeClass':'solr.StrField'}, {'name':'created_dt','stored':True,'type':'pdate'},
                 {'name':'phone_embedding','stored':True,'typeClass':'solr.DenseVectorField'}, {'name':'_hidden_','stored':True}, {'name':'unstored','stored':False}]
-        source=[('empty','email_s',''),('blank','email_s',' \t'),('null','email_s',None),('1','email_s','bad'),('2','email_s','ok@example.com')]
+        source=[('empty','email_s',''),('blank','email_s',' \t'),('null','email_s',None),('1','email_s','bad'),('2','email_s','ok@example.com'),
+                ('date-null','created_dt',None), ('vector-null','phone_embedding',None)]
         with tempfile.TemporaryDirectory() as directory:
             path=os.path.join(directory,'full_checkup.md')
             with patch('dq.reports.checkup.list_fields',return_value=fields), \
@@ -45,23 +46,28 @@ class CheckupTests(unittest.TestCase):
                  patch('dq.stored.values',return_value=iter(source)) as scan:
                 write_report('http://solr/c',path)
             self.assertEqual(scan.call_count,1)
-            self.assertEqual([f['name'] for f in scan.call_args[0][1]],['email_s'])
+            self.assertEqual([f['name'] for f in scan.call_args[0][1]],
+                             ['email_s', 'created_dt', 'phone_embedding'])
             with open(path) as stream: text=stream.read()
             self.assertIn('Report: `full_checkup`',text)
-            self.assertIn('inferred from field-name',text)
+            self.assertNotIn('## Check Selection', text)
             self.assertNotIn('_hidden_',text)
             self.assertNotIn('unstored',text)
-            self.assertTrue(os.path.isfile(os.path.join(directory,'email_s_full_checkup.md')))
+            self.assertFalse(os.path.isfile(os.path.join(directory,'email_s_full_checkup.md')))
             self.assertFalse(any(name.endswith('.svg') for name in os.listdir(directory)))
-            self.assertFalse(os.path.isfile(os.path.join(directory, 'created_dt_full_checkup.csv')))
-            self.assertTrue(os.path.isfile(os.path.join(directory, 'email_s_full_checkup.csv')))
+            self.assertTrue(os.path.isfile(os.path.join(directory, 'created_dt_missing_fields_base.csv')))
+            self.assertTrue(os.path.isfile(os.path.join(directory, 'phone_embedding_missing_fields_base.csv')))
+            with open(os.path.join(directory, 'created_dt_missing_fields_base.csv')) as stream:
+                self.assertIn('date-null,missing_fields_base: missing or null,', stream.read())
+            with open(os.path.join(directory, 'phone_embedding_missing_fields_base.csv')) as stream:
+                self.assertIn('vector-null,missing_fields_base: missing or null,', stream.read())
+            self.assertTrue(os.path.isfile(os.path.join(directory, 'email_s_email_composite.csv')))
             self.assertNotIn('date_checker', text)
-            with open(os.path.join(directory,'email_s_full_checkup.md')) as stream:
-                detail = stream.read()
-            self.assertIn('no configured regex matched',detail)
-            self.assertIn('- Finding rows: 4',detail)
-            self.assertIn('empty_strings_base: empty string',detail)
-            self.assertIn('whitespace_only_base: whitespace-only string',detail)
+            with open(os.path.join(directory,'email_s_email_composite.csv')) as stream:
+                findings = stream.read()
+            self.assertIn('no configured regex matched', findings)
+            self.assertIn('empty_strings_base: empty string', findings)
+            self.assertIn('whitespace_only_base: whitespace-only string', findings)
 
     def test_empty_only_does_not_scan_values(self):
         with tempfile.TemporaryDirectory() as directory:

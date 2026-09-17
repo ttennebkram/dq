@@ -16,7 +16,7 @@ class CheckupModeTests(unittest.TestCase):
             output = os.path.join(directory, 'quick_checkup.md')
             with patch('sys.stdout', io.StringIO()) as stdout, \
                  patch('dq.reports.checkup.list_fields', return_value=[{'name':'email_s', 'stored':True}]), \
-                 patch('dq.reports.checkup.collection_document_count', return_value=10), \
+                 patch('dq.reports.checkup.collection_document_count', side_effect=[10, 11]), \
                  patch('dq.reports.checkup.field_document_count', return_value=7), \
                  patch('dq.reports.checkup.scan') as scan, \
                  patch('dq.actions.load_config', return_value=DqConfig(main_url='http://solr/c')):
@@ -30,16 +30,23 @@ class CheckupModeTests(unittest.TestCase):
             self.assertIn('document counts for each selected field', text)
             self.assertNotIn('Stored values are not inspected', text)
             self.assertNotIn('None means', text)
-            self.assertIn('For large collections, we suggest choosing specific fields', text)
-            self.assertIn('`--rows` or its synonym `--size`', text)
-            self.assertIn('perform these additional checks.\n\nFor large collections', text)
+            self.assertIn('Run a detailed report with:', text)
+            self.assertIn('bin/dq --report full_checkup', text)
+            self.assertIn('For large collections, during testing, limit records with `--rows` or `--size`', text)
             self.assertIn('Additional checks in full report', text)
             self.assertIn('bin/dq --report full_checkup', text)
             self.assertIn('email', text)
             self.assertIn('Docs w/Value', text)
+            self.assertIn('Fields in collection/index `c`, which contains 11 documents:', text)
+            self.assertIn('Browse documents in Solr: <http://solr/c/select?q=*:*>', text)
+            self.assertLess(text.index('Browse documents in Solr:'),
+                            text.index('Document counts come from Solr'))
             self.assertLess(text.index('Docs w/Value'), text.index('Docs w/o Value'))
             self.assertRegex(text, r'`email_s`\s*\|\s*`unknown`\s*\|\s*7\s*\|\s*3\s*\|')
-            self.assertLess(text.index('## Run Additional Checks'), text.index('## Full Report Workload Estimate'))
+            self.assertNotIn('## Full Report Workload Estimate', text)
+            self.assertLess(text.index('## Results'), text.index('## Run Additional Checks'))
+            self.assertLess(text.index('## Run Additional Checks'), text.index('## Summary'))
+            self.assertLess(text.index('## Summary'), text.index('## Options Used'))
 
     def test_presence_only_label(self):
         from dq.reports.checkup import write_report
@@ -54,9 +61,11 @@ class CheckupModeTests(unittest.TestCase):
             self.assertFalse(scan.called)
             with open(path) as stream:
                 report = stream.read()
-            self.assertRegex(report, r'`created_dt`[^\n]+Presence check only')
+            self.assertRegex(report, r'`created_dt`[^\n]+missing_fields_base')
             self.assertNotIn('None means', report)
             self.assertNotIn('date_checker', report)
+            self.assertNotIn('### `created_dt`', report)
+            self.assertIn('bin/dq --include_field created_dt --rule missing_fields_base', report)
             self.assertNotIn('--config dq.ini', report)
 
     def test_full_dispatch_and_help(self):
@@ -84,15 +93,11 @@ class WorkloadTests(unittest.TestCase):
         plans = {'email': {'missing_fields_base': '', 'email_composite': ''},
                  'text': {'standard_text_composite': ''}, 'vector': {'missing_fields_base': ''}}
         text = '\n'.join(_full_workload(fields, plans, 1001))
-        self.assertIn('Documents to scan: 1,001', text)
-        self.assertIn('Stored fields to fetch per document: 2', text)
-        self.assertIn('approximately 2', text)
-        self.assertIn('document/field pairs: 2,002', text)
-        self.assertIn('Estimated stored-value scan time: 0.063-0.065 seconds', text)
-        self.assertIn('Timing metric: 15,300-15,800 records/second using Solr on MacBook Pro M4', text)
-        self.assertIn('full_checkup measurements: Solr 9.10.1 and 10.0.0', text)
-        self.assertNotIn('Prediction engine:', text)
-        self.assertNotIn('Runtime: not estimated yet', text)
+        self.assertIn('Estimated time:', text)
+        self.assertIn('to scan all records and all fields', text)
+        self.assertIn('reference Solr timing on MacBook Pro M4', text)
+        self.assertIn('0.063-0.065 seconds', text)
+        self.assertNotIn('| Planned value check', text)
 
     def test_elasticsearch_opensearch_estimate_uses_its_own_timing(self):
         from dq.reports.checkup import _full_workload
@@ -100,28 +105,22 @@ class WorkloadTests(unittest.TestCase):
         plans = {'email': {'email_composite': ''}}
         text = '\n'.join(_full_workload(
             fields, plans, 1000, engine='Elasticsearch/OpenSearch'))
-        self.assertIn('Estimated stored-value scan time: 0.060-0.060 seconds', text)
-        self.assertIn('16,700-16,800 records/second using Elasticsearch/OpenSearch', text)
-        self.assertIn('full_checkup measurements: Elasticsearch 9.5.3 and OpenSearch 3.8.0', text)
-        self.assertNotIn('Prediction engine:', text)
-        self.assertNotIn('15,300-15,800', text)
+        self.assertIn('reference Elasticsearch/OpenSearch timing on MacBook Pro M4', text)
+        self.assertIn('0.060-0.060 seconds', text)
+        self.assertNotIn('Solr 9.10.1', text)
 
-    def test_presence_only_has_no_scan(self):
+    def test_missing_only_rule_is_included_in_scan_estimate(self):
         from dq.reports.checkup import _full_workload
         text = '\n'.join(_full_workload([{'name': 'vector'}],
                          {'vector': {'missing_fields_base': ''}}, 1001))
-        self.assertIn('Collection documents: 1,001', text)
-        self.assertIn('Fields with presence checks: 1', text)
-        self.assertIn('Only field-presence checks are enabled', text)
-        self.assertNotIn('Documents to scan: 0', text)
-        self.assertNotIn('plus the unique key', text)
+        self.assertIn('to scan all records and all fields', text)
 
     def test_zero_rows_and_empty_collection_are_explained(self):
         from dq.reports.checkup import _full_workload
         fields = [{'name': 'notes_t'}]
         plans = {'notes_t': {'missing_fields_base': '', 'standard_text_composite': ''}}
-        for total, limit, reason in [(10, 0, 'disabled by rows = 0'),
+        for total, limit, reason in [(10, 0, 'disabled by `--rows 0`'),
                                      (0, -1, 'collection is empty')]:
             text = '\n'.join(_full_workload(fields, plans, total, row_limit=limit))
             self.assertIn(reason, text)
-            self.assertNotIn('Documents to scan: 0', text)
+            self.assertNotIn('scan up to 0', text)

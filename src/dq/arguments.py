@@ -110,9 +110,9 @@ More help: See the "More Help" section of README.md.
         help="list Solr collection fields and their schema properties",
     )
     commands.add_argument('--list_collections', '--list-collections', action='store_true',
-                          help='list collection names on stdout; removes a collection from main_url first')
+                          help='list collection names and document counts; removes a collection from main_url first')
     commands.add_argument('--list_indexes', '--list-indexes', action='store_true',
-                          help='list index names on stdout; synonym for --list_collections')
+                          help='list index names and document counts; synonym for --list_collections')
     commands.add_argument('--list_reports', '--list-reports', action='store_true',
                           help='list special reports and implementation status on stdout')
     commands.add_argument('--list_rules', '--list-rules', action='store_true',
@@ -124,7 +124,7 @@ More help: See the "More Help" section of README.md.
         help="write settings to ./dq.ini or the file named by --config",
     )
     commands.add_argument('--config_wizard', '--config-wizard', '--setup_wizard', '--setup-wizard', action='store_true',
-                         help='set up URL, collection and optional login; save ./dq.ini or --config FILE; suggests dq-demo for an unset collection; blank username skips password')
+                         help='set up URL, collection and optional login; save ./dq.ini or --config FILE; suggests dq_demo for an unset collection; blank username skips password')
     commands.add_argument('-h', '--help', action='help',
                           help='show this help message and exit')
     commands.add_argument(

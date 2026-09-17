@@ -2,7 +2,7 @@
 import json
 from fnmatch import fnmatchcase
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode, urlsplit, urlunsplit
+from urllib.parse import quote, urlencode, urlsplit, urlunsplit
 from urllib.request import Request
 from dq.connection import Connection
 from dq.solr import SolrError
@@ -67,6 +67,13 @@ def list_indexes(cluster_url, connection=None):
                 'Elasticsearch/OpenSearch cat indices response contained an invalid index name')
         names.append(name)
     return sorted(names)
+
+
+def list_index_counts(cluster_url, connection=None):
+    """Return sorted index names with their logical document counts."""
+    return [(name, collection_document_count(
+        cluster_url.rstrip('/') + '/' + quote(name, safe=''), connection=connection))
+            for name in list_indexes(cluster_url, connection=connection)]
 
 
 def _source_allowed(name, source):

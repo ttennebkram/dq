@@ -134,13 +134,13 @@ class CliTests(unittest.TestCase):
     def test_csv_findings_go_to_named_file(self):
         status, out, err, _ = self.run_export([{"name": "title_s", "stored": True}], [["a", "b"], ["c"]])
         self.assertEqual(status, 0)
-        self.assertEqual(out, "id,reason,value\r\na,missing_fields_base: missing or null,\r\nb,missing_fields_base: missing or null,\r\nc,missing_fields_base: missing or null,\r\n")
+        self.assertEqual(out, "id,reason,value\na,missing_fields_base: missing or null,\nb,missing_fields_base: missing or null,\nc,missing_fields_base: missing or null,\n")
         self.assertIn("Offending records exported: 3", err)
 
     def test_csv_header_without_matches(self):
         status, out, err, _ = self.run_export([{'name': 'title_s', 'stored': True}], [])
         self.assertEqual(status, 0)
-        self.assertEqual(out, 'id,reason,value\r\n')
+        self.assertEqual(out, 'id,reason,value\n')
         self.assertIn('Offending records exported: 0', err)
 
     def test_csv_quotes_and_unicode_roundtrip(self):

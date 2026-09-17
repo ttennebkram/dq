@@ -32,6 +32,15 @@ def list_collections(target, connection=None):
     return implementation(target, connection=connection)
 
 
+def list_collection_counts(target, connection=None):
+    """List collection/index names with logical document counts."""
+    if is_solr_target(target):
+        from dq.solr import list_collection_counts as implementation
+    else:
+        from dq.elasticsearch import list_index_counts as implementation
+    return implementation(target, connection=connection)
+
+
 def collection_document_count(target, connection=None):
     if is_solr_target(target):
         from dq.solr import collection_document_count as implementation

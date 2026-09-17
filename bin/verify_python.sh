@@ -1,12 +1,12 @@
 #!/bin/sh
 # Check the same python3 on PATH used by bin/dq, even when Python is missing.
 if [ "$#" -eq 1 ] && { [ "$1" = "--help" ] || [ "$1" = "-h" ]; }; then
-    echo "Usage: verify-python"
+    echo "Usage: verify_python.sh"
     echo "Checks python3 on PATH, the same interpreter used by bin/dq."
     exit 0
 fi
 if [ "$#" -ne 0 ]; then
-    echo "Usage: verify-python (no arguments; checks python3 on PATH)" >&2
+    echo "Usage: verify_python.sh (no arguments; checks python3 on PATH)" >&2
     exit 2
 fi
 dq_python_command="python3"
@@ -32,7 +32,7 @@ try:
     project = os.path.dirname(os.path.dirname(os.path.realpath(sys.argv[1])))
     source = os.path.join(project, "src")
     if not os.path.isfile(os.path.join(source, "dq", "main.py")):
-        raise RuntimeError("DQ source is missing: keep bin/verify-python inside the project checkout")
+        raise RuntimeError("DQ source is missing: keep bin/verify_python.sh inside the project checkout")
     sys.path.insert(0, str(source))
     from dq import __version__
     from dq.main import build_parser

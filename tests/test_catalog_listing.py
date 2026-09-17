@@ -44,7 +44,7 @@ class CatalogListingTests(unittest.TestCase):
             catalog_url(DqConfig(main_url='https://host.example/proxy/solr/my-files')),
             'https://host.example/proxy/solr')
         self.assertEqual(
-            catalog_url(DqConfig(main_url='http://localhost:9200/dq-demo')),
+            catalog_url(DqConfig(main_url='http://localhost:9200/dq_demo')),
             'http://localhost:9200')
 
     def test_engine_catalog_clients_sort_names(self):
@@ -58,6 +58,20 @@ class CatalogListingTests(unittest.TestCase):
         self.assertEqual(request.call_args[0], ('http://host:9200', '_cat/indices'))
         self.assertEqual(request.call_args[1]['format'], 'json')
 
+    def test_engine_catalog_counts_use_logical_document_counts(self):
+        with patch('dq.solr.list_collections', return_value=['alpha', 'zeta']), \
+                patch('dq.solr.collection_document_count', side_effect=[12, 3456]) as count:
+            self.assertEqual(solr.list_collection_counts('http://host/solr'),
+                             [('alpha', 12), ('zeta', 3456)])
+        self.assertEqual([call[0][0] for call in count.call_args_list],
+                         ['http://host/solr/alpha', 'http://host/solr/zeta'])
+        with patch('dq.elasticsearch.list_indexes', return_value=['alpha', 'zeta']), \
+                patch('dq.elasticsearch.collection_document_count', side_effect=[12, 3456]) as count:
+            self.assertEqual(elasticsearch.list_index_counts('http://host:9200'),
+                             [('alpha', 12), ('zeta', 3456)])
+        self.assertEqual([call[0][0] for call in count.call_args_list],
+                         ['http://host:9200/alpha', 'http://host:9200/zeta'])
+
     def test_list_collection_and_index_commands_use_server_url(self):
         with tempfile.TemporaryDirectory() as directory:
             path = os.path.join(directory, 'dq.ini')
@@ -66,11 +80,14 @@ class CatalogListingTests(unittest.TestCase):
             for option, noun in (('--list_collections', 'Collections'),
                                  ('--list_indexes', 'Indexes')):
                 with self.subTest(option=option), \
-                        patch('dq.listing.list_collections', return_value=['alpha', 'my-files']) as listing, \
+                        patch('dq.listing.list_collection_counts',
+                              return_value=[('alpha', 12), ('my-files', 2011748)]) as listing, \
                         patch('sys.stdout', io.StringIO()) as out:
                     self.assertEqual(main(['--config', path, option]), 0)
                 self.assertEqual(listing.call_args[0][0], 'http://localhost:8983/solr')
                 self.assertIn(noun + ': 2', out.getvalue())
+                self.assertIn('DOCUMENTS', out.getvalue())
+                self.assertIn('2,011,748', out.getvalue())
 
     def test_catalog_is_exclusive_with_other_actions(self):
         for arguments in (['--list_rules', '--report', 'quick_checkup'],

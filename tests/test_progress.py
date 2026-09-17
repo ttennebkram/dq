@@ -203,8 +203,8 @@ class ScanProgressTests(unittest.TestCase):
             scan('url', fields, plans, progress=Progress('full_checkup', interval=0),
                  row_limit=3, scan_progress=ScanProgress('full_checkup', 1, out))
         self.assertEqual(fetch.call_count, 2)
-        self.assertIn('Field: email_t; rules: empty_strings_base, whitespace_only_base, surrounding_whitespace_base, code_points_base, email_base', out.getvalue())
-        self.assertIn('Field: notes_t; rules: empty_strings_base, whitespace_only_base, surrounding_whitespace_base, code_points_base', out.getvalue())
+        self.assertNotIn('Field:', out.getvalue())
+        self.assertIn('Progress: one dot per 1 records, shared across all listed fields', out.getvalue())
         self.assertIn('... Documents checked: 3 across 2 fields in ', out.getvalue())
         self.assertIn('stored-value scan complete: 3 documents; 6 stored values', out.getvalue())
         self.assertNotIn('fetching next Solr page', out.getvalue())

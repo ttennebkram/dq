@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Submit demo documents by ID; optionally recreate the local dq-demo collection."""
+"""Submit demo documents by ID; optionally recreate the local dq_demo collection."""
 import argparse
 import time
 import errno
@@ -10,47 +10,62 @@ import sys
 from urllib.parse import urlsplit
 from urllib.request import Request
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
-from dq.config import load_config, collection_url
+from dq.config import load_config, catalog_url
 from dq.connection import Connection
+from dq.search import is_solr_target
 from dq.solr import get_json
 
 BATCH_SIZE = 5000
 
 
+def solr_base(config):
+    """Resolve only the Solr server root; ignore any configured collection."""
+    if not config.main_url or not is_solr_target(config.main_url):
+        raise ValueError('dq.ini main_url must identify Solr when running submit_to_solr.py')
+    return catalog_url(config)
+
+
 def prepare_collection(base, connection, recreate=False):
-    name = 'dq-demo'
+    name = 'dq_demo'
     collections = get_json(base, 'admin/collections', connection=connection, action='LIST', wt='json')['collections']
-    configs = get_json(base, 'admin/configs', connection=connection, action='LIST', wt='json')['configSets']
     if name in collections and not recreate:
         return False
-    if name in configs:
-        if not recreate:
-            raise ValueError('dq-demo configset already exists without its collection; use --recreate_collection')
-        status = get_json(base, 'admin/collections', connection=connection, action='CLUSTERSTATUS', wt='json')
-        shared = [key for key, value in status['cluster']['collections'].items()
-                  if key != name and value.get('configName') == name]
-        if shared:
-            raise ValueError('Refusing to recreate configset used by other collections: ' + ', '.join(shared))
+    configs = get_json(base, 'admin/configs', connection=connection, action='LIST', wt='json')['configSets']
+    status = get_json(base, 'admin/collections', connection=connection, action='CLUSTERSTATUS', wt='json')
+    cluster = status['cluster']['collections']
+    dedicated = set([name, name + '.AUTOCREATED'])
+    current_config = cluster.get(name, {}).get('configName')
+    candidates = set(config for config in dedicated if config in configs)
+    if current_config:
+        candidates.add(current_config)
+    shared = [key for key, value in cluster.items()
+              if key != name and value.get('configName') in candidates]
+    if shared:
+        raise ValueError('Refusing to recreate configset used by other collections: ' + ', '.join(shared))
+    if name not in collections and candidates and not recreate:
+        raise ValueError('dq_demo configset already exists without its collection; use --recreate_collection')
     if name in collections:
         get_json(base, 'admin/collections', connection=connection, action='DELETE', name=name, wt='json')
-    if name in configs:
-        get_json(base, 'admin/configs', connection=connection, action='DELETE', name=name, wt='json')
-    get_json(base, 'admin/configs', connection=connection, action='CREATE', name=name, baseConfigSet='_default', wt='json')
+    for config_name in sorted(candidates):
+        if config_name in configs:
+            get_json(base, 'admin/configs', connection=connection, action='DELETE', name=config_name, wt='json')
+    # Let Solr copy _default to dq_demo.AUTOCREATED. This is the normal unsecured
+    # SolrCloud creation path and avoids the trusted ConfigSets CREATE restriction.
     get_json(base, 'admin/collections', connection=connection, action='CREATE', name=name,
-             numShards=1, replicationFactor=1, wt='json', **{'collection.configName':name})
+             numShards=1, replicationFactor=1, wt='json')
     return True
 
 
 def describe_data_file(directory='.'):
     """Read file statistics without parsing JSON or contacting Solr."""
-    path = os.path.abspath(os.path.join(directory, 'documents-solr.json'))
+    path = os.path.abspath(os.path.join(directory, 'documents_solr.json'))
     print('\nData file: ' + path)
     try:
         info = os.stat(path)
     except OSError as error:
         if error.errno == errno.ENOENT:
             print('Exists: no')
-            print('Generate it first with ./generate-test-data-solr.py --count 1000')
+            print('Generate it first with ./generate_test_data_solr.py --rows 1000')
         else:
             print('Status: could not inspect file ({0})'.format(error))
         return
@@ -78,16 +93,19 @@ def describe_data_file(directory='.'):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(prog='submit-to-solr.py', description=__doc__)
+    parser = argparse.ArgumentParser(
+        prog='submit_to_solr.py',
+        description=__doc__,
+        epilog='Uses the server and authentication settings from dq.ini. The dq.ini collection setting is ignored: this loader always uses dq_demo.')
     actions = parser.add_mutually_exclusive_group(required=True)
     actions.add_argument('--submit', action='store_true',
                          help='submit documents, creating the demo collection if needed; replace matching IDs')
     actions.add_argument('--recreate_collection', '--recreate-collection', action='store_true',
-                        help='delete dq-demo and its configset, then rebuild and load it; removes all existing demo records')
+                        help='delete dq_demo and its configset, then rebuild and load it; removes all existing demo records')
     parser.add_argument('--preserve_empty_strings', '--preserve-empty-strings', action='store_true',
                         help='preserve empty strings for special tests; default: normal Solr blank removal')
     parser.add_argument('--data_files_dir', '--data-files-dir', default='.',
-                        help='directory containing documents-solr.json (default: current directory; relative or absolute path)')
+                        help='directory containing documents_solr.json (default: current directory; relative or absolute path)')
     argv = sys.argv[1:] if argv is None else argv
     if not argv:
         parser.print_help()
@@ -95,18 +113,21 @@ def main(argv=None):
         return 0
     args = parser.parse_args(argv)
     # Read and validate the fixture before any destructive recreation.
-    with open(os.path.join(args.data_files_dir, 'documents-solr.json'), encoding='utf-8') as stream:
+    with open(os.path.join(args.data_files_dir, 'documents_solr.json'), encoding='utf-8') as stream:
         documents = json.load(stream)
     if not isinstance(documents, list) or any(not isinstance(d, dict) or not isinstance(d.get('id'), str) or not d['id'] for d in documents):
-        parser.error('documents-solr.json must contain documents with nonempty string IDs')
+        parser.error('documents_solr.json must contain documents with nonempty string IDs')
     if len(set(d['id'] for d in documents)) != len(documents):
-        parser.error('documents-solr.json contains duplicate IDs')
+        parser.error('documents_solr.json contains duplicate IDs')
     setup = []
-    for filename, endpoint in [('schema-solr.json', 'schema')]:
+    for filename, endpoint in [('schema_solr.json', 'schema')]:
         with open(os.path.join(os.path.dirname(__file__), filename), encoding='utf-8') as stream:
             setup.append((endpoint, json.load(stream)))
     config = load_config()
-    base = collection_url(config).rsplit('/', 1)[0]
+    try:
+        base = solr_base(config)
+    except ValueError as error:
+        parser.error(str(error))
     if urlsplit(base).hostname not in ('localhost', '127.0.0.1', '::1'):
         raise ValueError('Demo loader requires a localhost Solr target')
     cert = config.trust_certificate
@@ -114,7 +135,7 @@ def main(argv=None):
         cert = os.path.join(os.path.dirname(config.source), cert)
     connection = Connection(config.username, config.password, cert)
     created = prepare_collection(base, connection, args.recreate_collection)
-    target = base + '/dq-demo'
+    target = base + '/dq_demo'
     def post(path, payload):
         request = Request(target + '/' + path, data=json.dumps(payload).encode('utf-8'),
                           headers={'Content-Type':'application/json'})
@@ -125,9 +146,10 @@ def main(argv=None):
             post(endpoint, payload)
     # Never change a shared or unrelated configset through the demo endpoint.
     cluster = get_json(base, 'admin/collections', connection=connection, action='CLUSTERSTATUS', wt='json')['cluster']['collections']
-    if cluster['dq-demo'].get('configName') != 'dq-demo' or any(
-            key != 'dq-demo' and value.get('configName') == 'dq-demo' for key, value in cluster.items()):
-        raise ValueError('Blank processing requires a dedicated dq-demo configset')
+    config_name = cluster['dq_demo'].get('configName')
+    if config_name not in ('dq_demo', 'dq_demo.AUTOCREATED') or any(
+            key != 'dq_demo' and value.get('configName') == config_name for key, value in cluster.items()):
+        raise ValueError('Blank processing requires a dedicated dq_demo configset')
     processor = 'solr.LogUpdateProcessorFactory' if args.preserve_empty_strings else 'solr.RemoveBlankFieldUpdateProcessorFactory'
     post('config', {'update-updateprocessor': {'name': 'remove-blank', 'class': processor}})
     print('Empty strings: ' + ('preserved (special test mode)' if args.preserve_empty_strings else 'removed (normal Solr processing)'))

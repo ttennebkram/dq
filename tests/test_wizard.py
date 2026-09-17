@@ -77,7 +77,7 @@ class WizardTests(unittest.TestCase):
             output = self.run_wizard(path, [''] * 4)
             config = load_config(path)
             self.assertEqual(config.main_url, 'http://localhost:8983/solr')
-            self.assertEqual(config.collection, 'dq-demo')
+            self.assertEqual(config.collection, 'dq_demo')
             self.assertIn('Solr:          http://localhost:8983/solr', output)
             self.assertIn('Elasticsearch: http://localhost:9200', output)
             self.assertIn('OpenSearch:    http://localhost:9200', output)
@@ -104,7 +104,7 @@ class WizardTests(unittest.TestCase):
         for username in ('', '   '):
             with tempfile.TemporaryDirectory() as directory:
                 path = os.path.join(directory, 'dq.ini')
-                write_config(path, 'http://localhost:8983/solr', 'dq-demo',
+                write_config(path, 'http://localhost:8983/solr', 'dq_demo',
                              username=username, password='stale-password')
                 self.run_wizard(path, [''] * 4)
                 config = load_config(path)
@@ -126,7 +126,7 @@ class WizardTests(unittest.TestCase):
     def test_saved_certificate_preserved_without_prompt(self):
         with tempfile.TemporaryDirectory() as directory:
             path = os.path.join(directory, 'dq.ini')
-            write_config(path, 'https://localhost:8984/solr', 'dq-demo',
+            write_config(path, 'https://localhost:8984/solr', 'dq_demo',
                          trust_certificate='certs/local.pem')
             with patch('dq.wizard.Connection'):
                 self.run_wizard(path, [''] * 4)
@@ -145,7 +145,7 @@ class WizardTests(unittest.TestCase):
     def test_advanced_settings_preserved_without_questions(self):
         with tempfile.TemporaryDirectory() as directory:
             path = os.path.join(directory, 'dq.ini')
-            write_config(path, 'http://localhost:8983/solr', 'dq-demo',
+            write_config(path, 'http://localhost:8983/solr', 'dq_demo',
                          include_fields=['file_*'], exclude_fields=['*_vector'],
                          reports_dir='results')
             self.run_wizard(path, [''] * 4)

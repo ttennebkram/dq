@@ -33,10 +33,11 @@ class FirstFailureTests(unittest.TestCase):
         self.assertEqual([row[2] for row in rows], [row[2] for row in source])
 
     def test_code_points_base_reports_one_failure_per_value(self):
-        with patch('dq.stored.values', return_value=iter([('one', 'f', '\ufffd\ue000')])):
+        value = '\ufffd\u200b\ue000'
+        with patch('dq.stored.values', return_value=iter([('one', 'f', value)])):
             rows = list(unicode_findings('url', [{'name': 'f'}]))
         self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0][2], '\ufffd\ue000')
+        self.assertEqual(rows[0][2], value)
 
 
 class StatsTests(unittest.TestCase):

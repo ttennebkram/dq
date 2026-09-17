@@ -76,5 +76,5 @@ class SavedFilterTests(unittest.TestCase):
                 main(['--config', path, '--rule', 'missing_fields_base', '--action', 'csv', '--rows', '1', '--reports_dir', directory])
                 self.assertIn('name_s_missing_fields_base.csv', stdout.getvalue())
                 with open(os.path.join(directory, 'name_s_missing_fields_base.csv'), newline='') as stream:
-                    self.assertEqual(stream.read(), 'id,reason,value\r\none,missing_fields_base: missing or null,\r\n')
+                    self.assertEqual(stream.read(), 'id,reason,value\none,missing_fields_base: missing or null,\n')
                 self.assertEqual(pages.call_args[0][1][0]['name'], 'name_s')

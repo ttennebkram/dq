@@ -69,6 +69,25 @@ def field_output_paths(directory, rule_name, fields, extension):
     return paths
 
 
+def field_rule_output_paths(directory, field_rules, extension):
+    """Plan per-field files when each field can use a different rule name."""
+    from collections import OrderedDict
+    from dq.errors import ReportError
+    paths = OrderedDict()
+    used = {}
+    for field, rule_name in field_rules:
+        name = field if isinstance(field, str) else field['name']
+        filename = field_filename(name, rule_name, extension)
+        key = filename.lower()
+        if key in used:
+            raise ReportError('field filenames collide: {0!r} and {1!r}; select them separately and use different reports_dir directories'.format(used[key], name))
+        used[key] = name
+        paths[name] = os.path.join(directory, filename)
+    if not paths:
+        raise ReportError('no fields selected for output')
+    return paths
+
+
 def field_option_details(details, path, field):
     result = [(key, str(path) if key == 'output file' else value,
                'field name and report name within reports_dir' if key == 'output file' else source)
