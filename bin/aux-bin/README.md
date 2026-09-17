@@ -11,7 +11,7 @@ authentication on a local SolrCloud installation with embedded ZooKeeper.
 Copy `solr_auth.py` into the target Solr installation's `local-scripts/` directory
 (recommended), its existing `bin/` directory, or the installation root. Make the
 copied script executable with `chmod +x`. See the
-[main README installation instructions](../README.md#install-the-optional-solr-helper)
+[main README installation instructions](../../README.md#install-the-optional-solr-helper)
 for full commands.
 
 From the Solr installation root, using the recommended layout:
@@ -35,6 +35,6 @@ this source; copies are not synchronized automatically.
 
 ## License
 
-These scripts are licensed under [Apache 2.0](../LICENSE.txt), including commercial
+These scripts are licensed under [Apache 2.0](../../LICENSE.txt), including commercial
 and proprietary use subject to its terms. Include the LICENSE.txt when redistributing
 the scripts.

@@ -1,5 +1,5 @@
 include LICENSE.txt README.md dq.ini.template
-recursive-include aux-bin *
+recursive-include bin/aux-bin *
 recursive-include docs *.md
 
 recursive-include src/dq/rules *.ini *.regex

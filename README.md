@@ -1133,7 +1133,7 @@ for the keystore and server configuration reference.
 
 ### Install the Optional Solr Helper
 
-DQ distributes `solr_auth.py` in [aux-bin/](aux-bin/README.md). Copy it into the
+DQ distributes `solr_auth.py` in [bin/aux-bin/](bin/aux-bin/README.md). Copy it into the
 Solr installation before using it. It is a standalone helper and does not
 require DQ to be installed or remain at its current path.
 
@@ -1142,28 +1142,28 @@ DQ project directory:
 
 ```sh
 mkdir -p ~/dev/solr-9.10.1/local-scripts
-cp aux-bin/solr_auth.py ~/dev/solr-9.10.1/local-scripts/solr_auth.py
+cp bin/aux-bin/solr_auth.py ~/dev/solr-9.10.1/local-scripts/solr_auth.py
 chmod +x ~/dev/solr-9.10.1/local-scripts/solr_auth.py
 ```
 
 Alternatively, copy it into Solr's existing `bin/` directory:
 
 ```sh
-cp aux-bin/solr_auth.py ~/dev/solr-9.10.1/bin/solr_auth.py
+cp bin/aux-bin/solr_auth.py ~/dev/solr-9.10.1/bin/solr_auth.py
 chmod +x ~/dev/solr-9.10.1/bin/solr_auth.py
 ```
 
 You can also copy it directly into the Solr installation root. The helper
 detects the installation from its own location in any of these three layouts.
 Use `--solr_dir DIR` to specify the installation explicitly when running it
-from elsewhere, including directly from DQ's `aux-bin/`.
+from elsewhere, including directly from DQ's `bin/aux-bin/`.
 
 Choose one installed location. The examples below use `local-scripts/`; use
 `bin/solr_auth.py` or `./solr_auth.py` instead if you chose another location. After
 updating the helper in DQ, repeat the copy to update your installed copy.
 Copying the script does not change authentication or overwrite the saved login.
 The password file is always `local-auth.ini` in the selected Solr installation
-root, never in DQ's `aux-bin/`.
+root, never in DQ's `bin/aux-bin/`.
 
 ### Switch Local Solr Basic Authentication On or Off
 
@@ -1224,7 +1224,7 @@ local testing. Keep anonymous Solr access restricted to the local machine.
 The saved login file is
 `~/dev/solr-9.10.1/local-auth.ini`.
 The installed helper runs independently of DQ; its distributable source is in
-DQ's `aux-bin/`.
+DQ's `bin/aux-bin/`.
 
 ## Vocabulary
 
@@ -1389,8 +1389,8 @@ The main project directories and files are:
 | Path | Purpose |
 | ---- | ------- |
 | <nobr><code>dq/</code></nobr> | Project root. |
-| <nobr><code>├── aux-bin/</code></nobr> | Optional helper scripts for managing a local Solr installation. |
 | <nobr><code>├── bin/</code></nobr> | DQ command-line launchers for macOS, Linux, and Windows. |
+| <nobr><code>│   └── aux-bin/</code></nobr> | Optional helper scripts for managing a local Solr installation. |
 | <nobr><code>├── docs/</code></nobr> | Additional reference material. In this version, most documentation is in the main `README.md` file. |
 | <nobr><code>├── generate_test_collection/</code></nobr> | Generates fake test data and submits it to Solr, Elasticsearch, or OpenSearch. |
 | <nobr><code>├── reports/</code></nobr> | Default destination for generated Markdown and CSV output. |
