@@ -21,6 +21,9 @@ dq.ini
 
 .DS_Store
 
+# Local Codex/project-maintenance instructions.
+/AGENTS.md
+
 # Generated synthetic data (in cwd or a chosen output directory).
 documents_solr.json
 
