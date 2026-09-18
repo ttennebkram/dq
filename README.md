@@ -246,7 +246,7 @@ not generate or overwrite any files:
 On Windows, use the matching command launcher:
 
 ```cmd
-generate_test_data_solr.cmd
+.\generate_test_data_solr.cmd
 ```
 
 Running with no arguments will show the syntax.
@@ -283,7 +283,7 @@ Submit the generated records, creating the Solr collection if needed:
 On Windows:
 
 ```cmd
-submit_to_solr.cmd --submit
+.\submit_to_solr.cmd --submit
 ```
 
 To remove the old test collection, rebuild it, and load the generated records:
@@ -333,7 +333,7 @@ Run without arguments to display its syntax:
 On Windows:
 
 ```cmd
-generate_test_data_es.cmd
+.\generate_test_data_es.cmd
 ```
 
 Generate the same 1,000-record, 20%-incorrect fixture in ES format:
@@ -357,7 +357,7 @@ Submit the generated records, creating the ES index if needed:
 On Windows:
 
 ```cmd
-submit_to_es.cmd --submit
+.\submit_to_es.cmd --submit
 ```
 
 To remove the old test index, rebuild it, and load the generated records:
@@ -953,13 +953,13 @@ The four user-facing scripts in `generate_test_collection` have `.cmd`
 launchers. For example:
 
 ```bat
-generate_test_data_solr.cmd --rows 1000
+.\generate_test_data_solr.cmd --rows 1000
 ```
 
 Submit the generated data with:
 
 ```bat
-submit_to_solr.cmd --submit
+.\submit_to_solr.cmd --submit
 ```
 
 The corresponding Elasticsearch/OpenSearch launchers are

@@ -13,5 +13,7 @@ The four user-facing Python scripts have matching Windows launchers:
 | `submit_to_es.py` | `submit_to_es.cmd` | Create or update the Elasticsearch/OpenSearch `dq_demo` index. |
 
 On macOS and Linux, run a Python script directly with `./SCRIPT.py`. On Windows,
-run its `.cmd` launcher; each launcher uses `py.exe -3`, forwards all arguments,
-and returns the Python script's exit status.
+run its launcher as `.\SCRIPT.cmd`; the `.\` prefix works in PowerShell and
+Command Prompt without putting the current directory on `PATH`. Each launcher
+uses `py.exe -3`, forwards all arguments, and returns the Python script's exit
+status.
