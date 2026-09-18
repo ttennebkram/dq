@@ -113,6 +113,8 @@ class DemoGeneratorTests(unittest.TestCase):
         self.assertIn('--rows', output.getvalue())
         self.assertIn('--size', output.getvalue())
         self.assertIn('Examples:', output.getvalue())
+        self.assertNotIn('--incorrect-percent', output.getvalue())
+        self.assertNotIn('--data-files-dir', output.getvalue())
         self.assertFalse(generate.called)
 
 

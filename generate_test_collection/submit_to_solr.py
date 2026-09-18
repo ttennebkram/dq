@@ -96,29 +96,36 @@ def main(argv=None):
     parser = argparse.ArgumentParser(
         prog='submit_to_solr.py',
         description=__doc__,
-        epilog='Uses the server and authentication settings from dq.ini. The dq.ini collection setting is ignored: this loader always uses dq_demo.')
+        epilog='Uses the server and authentication settings from ../dq.ini. The ../dq.ini collection setting is ignored: this loader always uses dq_demo.')
     actions = parser.add_mutually_exclusive_group(required=True)
     actions.add_argument('--submit', action='store_true',
-                         help='submit documents, creating the demo collection if needed; replace matching IDs')
-    actions.add_argument('--recreate_collection', '--recreate-collection', action='store_true',
-                        help='delete dq_demo and its configset, then rebuild and load it; removes all existing demo records')
-    parser.add_argument('--preserve_empty_strings', '--preserve-empty-strings', action='store_true',
+                         help='submit documents in documents_solr.json, creating the demo collection dq_demo if needed')
+    actions.add_argument('--recreate_collection', action='store_true',
+                        help='delete dq_demo and its configset, then rebuild an empty collection without submitting')
+    actions.add_argument('--recreate-collection', dest='recreate_collection', action='store_true',
+                         help=argparse.SUPPRESS)
+    parser.add_argument('--preserve_empty_strings', action='store_true',
                         help='preserve empty strings for special tests; default: normal Solr blank removal')
-    parser.add_argument('--data_files_dir', '--data-files-dir', default='.',
+    parser.add_argument('--preserve-empty-strings', dest='preserve_empty_strings', action='store_true',
+                        help=argparse.SUPPRESS)
+    parser.add_argument('--data_files_dir', default='.',
                         help='directory containing documents_solr.json (default: current directory; relative or absolute path)')
+    parser.add_argument('--data-files-dir', dest='data_files_dir', help=argparse.SUPPRESS)
     argv = sys.argv[1:] if argv is None else argv
     if not argv:
         parser.print_help()
         describe_data_file()
         return 0
     args = parser.parse_args(argv)
-    # Read and validate the fixture before any destructive recreation.
-    with open(os.path.join(args.data_files_dir, 'documents_solr.json'), encoding='utf-8') as stream:
-        documents = json.load(stream)
-    if not isinstance(documents, list) or any(not isinstance(d, dict) or not isinstance(d.get('id'), str) or not d['id'] for d in documents):
-        parser.error('documents_solr.json must contain documents with nonempty string IDs')
-    if len(set(d['id'] for d in documents)) != len(documents):
-        parser.error('documents_solr.json contains duplicate IDs')
+    documents = None
+    if args.submit:
+        # Read and validate the fixture before any destructive recreation.
+        with open(os.path.join(args.data_files_dir, 'documents_solr.json'), encoding='utf-8') as stream:
+            documents = json.load(stream)
+        if not isinstance(documents, list) or any(not isinstance(d, dict) or not isinstance(d.get('id'), str) or not d['id'] for d in documents):
+            parser.error('documents_solr.json must contain documents with nonempty string IDs')
+        if len(set(d['id'] for d in documents)) != len(documents):
+            parser.error('documents_solr.json contains duplicate IDs')
     setup = []
     for filename, endpoint in [('schema_solr.json', 'schema')]:
         with open(os.path.join(os.path.dirname(__file__), filename), encoding='utf-8') as stream:
@@ -153,6 +160,9 @@ def main(argv=None):
     processor = 'solr.LogUpdateProcessorFactory' if args.preserve_empty_strings else 'solr.RemoveBlankFieldUpdateProcessorFactory'
     post('config', {'update-updateprocessor': {'name': 'remove-blank', 'class': processor}})
     print('Empty strings: ' + ('preserved (special test mode)' if args.preserve_empty_strings else 'removed (normal Solr processing)'))
+    if not args.submit:
+        print('Recreated empty collection: ' + target)
+        return 0
     total = len(documents)
     for start in range(0, total, BATCH_SIZE):
         end = min(start + BATCH_SIZE, total)

@@ -134,11 +134,13 @@ def server_identity(identity):
 def main(argv=None):
     prog = 'submit_to_es.py'
     parser = argparse.ArgumentParser(prog=prog, description='Create the fixed dq_demo index and submit test data to Elasticsearch or OpenSearch. The same command, schema and bulk format support both.',
-        epilog='Uses the server and authentication settings from dq.ini when main_url identifies Elasticsearch or OpenSearch. The dq.ini collection/index setting is ignored: this loader always uses dq_demo. For a different server, use --main_url or a separate DQ configuration file. No engine switch is needed.')
+        epilog='Uses the server and authentication settings from ../dq.ini when main_url identifies Elasticsearch or OpenSearch. The ../dq.ini collection/index setting is ignored: this loader always uses dq_demo. For a different server, use --main_url or a separate DQ configuration file. No engine switch is needed.')
     actions = parser.add_mutually_exclusive_group(required=True)
-    actions.add_argument('--submit', action='store_true', help='create index if needed and add/replace matching IDs')
-    actions.add_argument('--recreate_index', '--recreate-index', action='store_true', help='delete the target index, recreate mappings, and submit')
-    parser.add_argument('--data_files_dir', '--data-files-dir', default='.', help='directory containing documents_es.ndjson; default: cwd')
+    actions.add_argument('--submit', action='store_true', help='submit documents in documents_es.ndjson, creating the demo index dq_demo if needed')
+    actions.add_argument('--recreate_index', action='store_true', help='delete the target index and recreate its mappings without submitting')
+    actions.add_argument('--recreate-index', dest='recreate_index', action='store_true', help=argparse.SUPPRESS)
+    parser.add_argument('--data_files_dir', default='.', help='directory containing documents_es.ndjson; default: cwd')
+    parser.add_argument('--data-files-dir', dest='data_files_dir', help=argparse.SUPPRESS)
     parser.add_argument('--config', help='INI file; otherwise discover dq.ini in cwd/parents')
     parser.add_argument('--main_url', '--main-url', help='Elasticsearch or OpenSearch server root; overrides INI main_url; default: http://localhost:9200')
     for name in ('username','password','trust_certificate'):
@@ -159,7 +161,8 @@ def main(argv=None):
     args = parser.parse_args(argv)
     try:
         path = os.path.join(args.data_files_dir, 'documents_es.ndjson')
-        total = sum(count for _,count in batches(path))  # Validate before destructive requests.
+        total = (sum(count for _,count in batches(path))
+                 if args.submit else None)  # Validate before destructive requests.
         with open(os.path.join(os.path.dirname(__file__), 'schema_es.json'), encoding='utf-8') as stream:
             schema = json.load(stream)
         base, connection, config, settings_source = connection_settings(args)
@@ -180,6 +183,9 @@ def main(argv=None):
             response = request(connection,base,index_path,method='PUT',payload=schema)
             if response.get('acknowledged') is not True:
                 raise SubmissionError('Index creation was not acknowledged')
+        if not args.submit:
+            print('Recreated empty index: {0}{1}'.format(base, index_path))
+            return 0
         written = 0
         for payload,count in batches(path):
             response = request(connection,base,index_path+'/_bulk',method='POST',payload=payload,ndjson=True)

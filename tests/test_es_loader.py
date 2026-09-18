@@ -19,10 +19,45 @@ import data_generator_common
 
 
 class EsLoaderTests(unittest.TestCase):
+    def test_no_arguments_hide_hyphenated_aliases(self):
+        with patch('sys.stdout', io.StringIO()) as output:
+            self.assertEqual(submit_to_es.main([]), 0)
+        self.assertIn('--recreate_index', output.getvalue())
+        self.assertIn('--data_files_dir', output.getvalue())
+        self.assertIn('documents_es.ndjson', output.getvalue())
+        self.assertNotIn('--recreate-index', output.getvalue())
+        self.assertNotIn('--data-files-dir', output.getvalue())
+
     def test_index_override_is_rejected(self):
         with patch('sys.stderr', io.StringIO()), self.assertRaises(SystemExit) as error:
             submit_to_es.main(['--submit', '--index', 'production'])
         self.assertEqual(error.exception.code, 2)
+
+    def test_recreate_and_submit_are_mutually_exclusive(self):
+        with patch('sys.stderr', io.StringIO()), self.assertRaises(SystemExit) as error:
+            submit_to_es.main(['--recreate_index', '--submit'])
+        self.assertEqual(error.exception.code, 2)
+
+    def test_recreate_does_not_require_fixture_or_submit_documents(self):
+        calls = []
+
+        def fake_request(connection, base, path, **kwargs):
+            calls.append((path, kwargs.get('method', 'GET')))
+            if path == '/':
+                return {'version': {'number': '9.5.3'},
+                        'tagline': 'You Know, for Search'}
+            if kwargs.get('method') in ('DELETE', 'PUT'):
+                return {'acknowledged': True}
+            return {'dq_demo': {}}
+
+        with patch('submit_to_es.connection_settings', return_value=(
+                'http://localhost:9200', None, None, None)), \
+                patch('submit_to_es.request', side_effect=fake_request), \
+                patch('sys.stdout', io.StringIO()):
+            self.assertEqual(submit_to_es.main([
+                '--recreate_index', '--data_files_dir', '/missing']), 0)
+        self.assertEqual(calls, [('/', 'GET'), ('/dq_demo', 'GET'),
+                                 ('/dq_demo', 'DELETE'), ('/dq_demo', 'PUT')])
 
     def test_generated_bulk_round_trip_and_paging(self):
         with tempfile.TemporaryDirectory() as directory:

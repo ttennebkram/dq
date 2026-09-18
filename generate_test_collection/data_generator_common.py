@@ -107,40 +107,31 @@ def main(argv=None, backend='solr'):
     parser = argparse.ArgumentParser(
         prog='generate_test_data_' + backend + '.py', description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""From the project root, first run: cd generate_test_collection
+        epilog="""Assumes you're in the generate_test_collection directory under the main dq project directory.
 
 Examples:
   # Run from inside generate_test_collection/
-  ./generate_test_data.py --rows 1000 --incorrect_percent 20
+  ./generate_test_data.py --rows 1000
   ./generate_test_data.py --rows 1000 --incorrect_percent 25 --seed 42
 
-RANDOM BY DEFAULT: omit --seed for a fresh run.
-REPEATABLE: supply --seed N with the same options and generator/Python version.
-The chosen seed is printed, including for random runs.
-Seeds 0 and -1 are ordinary repeatable seeds, not special random modes.
+Writes demo data to documents_solr.json in the current working directory if --data_files_dir is not used.
+To actually submit the generated documents to Solr, use submit_to_solr.py.
 
-Writes documents_solr.json in the current working directory.
---data_files_dir is relative to the current directory unless an absolute path is given.
-Reusable schema/config files, the loader, and demo notes live in generate_test_collection/.
-Does not submit data to Solr.
-Load generated data from this directory with:
-  ./submit_to_solr.py --submit
-The loader searches upward for ../dq.ini.
-Add --recreate_collection to the loader to rebuild the demo collection.
-
-Fields: """ + ', '.join(FIELDS))
+Generated Fields: """ + ', '.join(FIELDS))
     parser.epilog = parser.epilog.replace('generate_test_data.py', parser.prog)
     if backend == 'es':
         parser.epilog = parser.epilog.replace('documents_solr.json', 'documents_es.ndjson').replace(
-            'Does not submit data to Solr.', 'Elasticsearch and OpenSearch share this bulk format. No data is submitted.').replace(
-            './submit_to_solr.py --submit', './submit_to_es.py --submit (supports Elasticsearch and OpenSearch; use --main_url for the target)').replace(
-            '--recreate_collection', '--recreate_index')
+            'To actually submit the generated documents to Solr, use submit_to_solr.py.',
+            'To actually submit the generated documents to Elasticsearch or OpenSearch, use submit_to_es.py.')
     parser.add_argument('--rows', '--size', dest='rows', metavar='N', type=document_count,
                         help='required number of documents; --size is equivalent; suggested starting value: 1000')
-    parser.add_argument('--incorrect_percent', '--incorrect-percent', type=float, default=20, help='incorrect records per field, 0-100 percent (default: 20)')
-    parser.add_argument('--seed', type=int, default=None, help='repeatable integer seed; omit for fresh randomness (0 and -1 are repeatable too)')
+    parser.add_argument('--incorrect_percent', type=float, default=20, help='incorrect records per field, 0-100 percent (default: 20)')
+    parser.add_argument('--incorrect-percent', dest='incorrect_percent', type=float,
+                        help=argparse.SUPPRESS)
+    parser.add_argument('--seed', type=int, default=None, help='repeatable integer random seed; omit for fresh randomness (0 and -1 are repeatable too)')
     default_directory = '.'
-    parser.add_argument('--data_files_dir', '--data-files-dir', default=default_directory, help='directory for generated documents (default: current directory; relative or absolute path)')
+    parser.add_argument('--data_files_dir', default=default_directory, help='directory for generated documents (default: current directory; relative or absolute path)')
+    parser.add_argument('--data-files-dir', dest='data_files_dir', help=argparse.SUPPRESS)
     argv = sys.argv[1:] if argv is None else argv
     if not argv:
         parser.print_help()

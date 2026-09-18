@@ -249,10 +249,8 @@ On Windows, use the matching command launcher:
 .\generate_test_data_solr.cmd
 ```
 
-Running with no arguments will show the syntax.
-
-Example: Generate 1,000 records with a 20% incorrect-value setting.
-`--rows` is required; `--size` is equivalent, and 1,000 is a suggested starting size:
+**Generate Data Example:** `--rows` is required; `--size` is equivalent. The
+following command generates 1,000 records with a 20% incorrect-value setting:
 
 ```sh
 ./generate_test_data_solr.py --rows 1_000 --incorrect_percent 20
@@ -286,11 +284,17 @@ On Windows:
 .\submit_to_solr.cmd --submit
 ```
 
-To remove the old test collection, rebuild it, and load the generated records:
+To replace the old test collection with an empty collection, then load the
+generated records, run two commands:
 
 ```sh
 ./submit_to_solr.py --recreate_collection
+./submit_to_solr.py --submit
 ```
+
+`--submit` is required whenever documents should be loaded and automatically
+creates the collection if it does not exist. The two options are mutually
+exclusive.
 
 To generate the same random data each time, which can simplify some tests, use
 `--seed SOME_NUMBER`.
@@ -326,7 +330,8 @@ On Windows:
 .\generate_test_data_es.cmd
 ```
 
-Generate the same 1,000-record, 20%-incorrect fixture in ES format:
+Generate the same 1,000-record, 20%-incorrect fixture in ES format. The default
+value for `--incorrect_percent` is `20`; it is shown explicitly here:
 
 ```sh
 ./generate_test_data_es.py --rows 1_000 --incorrect_percent 20
@@ -350,34 +355,26 @@ On Windows:
 .\submit_to_es.cmd --submit
 ```
 
-To remove the old test index, rebuild it, and load the generated records:
+To replace the old test index with an empty index, then load the generated
+records, run two commands:
 
 ```sh
 ./submit_to_es.py --recreate_index
+./submit_to_es.py --submit
 ```
 
-The same submission command supports OpenSearch. To use the local instance on
-port 9201:
+`--submit` is required whenever documents should be loaded and automatically
+creates the index if it does not exist. The two options are mutually exclusive.
 
-```sh
-./submit_to_es.py --main_url http://localhost:9201 --submit
-```
+ES and OpenSearch preserve empty strings in `_source` normally, so they do not
+need Solr's `--preserve_empty_strings` loader option.
 
-Run the equivalent quick checkup against Elasticsearch:
-
-```sh
-../bin/dq --main_url http://localhost:9200 --index dq_demo --report quick_checkup
-```
-
-For OpenSearch on the local test port, change the URL to
-`http://localhost:9201`. ES and OpenSearch preserve empty strings in `_source`
-normally, so they do not need Solr's `--preserve_empty_strings` loader option.
-
-Both engines share `documents_es.ndjson`, `schema_es.json`, and the basic loader
-API logic. Solr uses `documents_solr.json` and `schema_solr.json`.
+Both engines, Elasticsearch and OpenSearch, share `documents_es.ndjson`,
+`schema_es.json`, and the basic loader API logic. Solr uses
+`documents_solr.json` and `schema_solr.json`.
 The shared ES/OpenSearch loader accepts `--main_url`, `--data_files_dir`,
 `--config`, `--username`, `--password`, `--trust_certificate`, and either
-`--submit` or `--recreate_index`. It uses the normal DQ connection settings when
+`--submit` or `--recreate_index`. The loader uses the normal DQ connection settings when
 `main_url` identifies Elasticsearch or OpenSearch; CLI options override them.
 If `dq.ini` points to Solr, the ES loader reports the mismatch instead of using
 that target or its credentials. Use separate INI files when servers need

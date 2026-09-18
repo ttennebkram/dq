@@ -5,6 +5,7 @@ import tempfile
 import runpy
 import unittest
 from unittest.mock import Mock, patch
+from types import SimpleNamespace
 
 loader = runpy.run_path(os.path.join(os.path.dirname(__file__), '..', 'generate_test_collection', 'submit_to_solr.py'))
 prepare = loader['prepare_collection']
@@ -67,12 +68,52 @@ class DemoLoaderTests(unittest.TestCase):
              patch.dict(main.__globals__, describe_data_file=Mock()):
             self.assertEqual(main([]), 0)
         self.assertIn('--submit', output.getvalue())
+        self.assertIn('documents_solr.json', output.getvalue())
         self.assertIn('--recreate_collection', output.getvalue())
+        self.assertNotIn('--recreate-collection', output.getvalue())
+        self.assertNotIn('--preserve-empty-strings', output.getvalue())
+        self.assertNotIn('--data-files-dir', output.getvalue())
 
     def test_directory_alone_is_not_an_action(self):
         with patch('sys.stderr', io.StringIO()), self.assertRaises(SystemExit) as error:
             loader['main'](['--data_files_dir', '.'])
         self.assertEqual(error.exception.code, 2)
+
+    def test_recreate_and_submit_are_mutually_exclusive(self):
+        with patch('sys.stderr', io.StringIO()), self.assertRaises(SystemExit) as error:
+            loader['main'](['--recreate_collection', '--submit'])
+        self.assertEqual(error.exception.code, 2)
+
+    def test_recreate_does_not_require_fixture_or_submit_documents(self):
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *unused):
+                return False
+
+            def read(self):
+                return b'{}'
+
+        connection = Mock()
+        connection.open.return_value = Response()
+        config = SimpleNamespace(main_url='http://localhost:8983/solr', collection=None,
+                                 trust_certificate=None, source=None,
+                                 username=None, password=None)
+        cluster = {'cluster': {'collections': {
+            'dq_demo': {'configName': 'dq_demo'}}}}
+        with patch.dict(loader['main'].__globals__,
+                        load_config=Mock(return_value=config),
+                        Connection=Mock(return_value=connection),
+                        prepare_collection=Mock(return_value=True),
+                        get_json=Mock(return_value=cluster)), \
+                patch('sys.stdout', io.StringIO()):
+            self.assertEqual(loader['main']([
+                '--recreate_collection', '--data_files_dir', '/missing']), 0)
+        urls = [call[0][0].full_url for call in connection.open.call_args_list]
+        self.assertTrue(any(url.endswith('/schema') for url in urls))
+        self.assertTrue(any(url.endswith('/config') for url in urls))
+        self.assertFalse(any('/update' in url for url in urls))
 
 
     def test_file_status_existing_and_missing(self):
