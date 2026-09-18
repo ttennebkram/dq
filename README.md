@@ -243,10 +243,10 @@ not generate or overwrite any files:
 ./generate_test_data_solr.py
 ```
 
-On Windows, run the same Python script with the Python launcher:
+On Windows, use the matching command launcher:
 
 ```cmd
-py -3 generate_test_data_solr.py
+generate_test_data_solr.cmd
 ```
 
 Running with no arguments will show the syntax.
@@ -283,7 +283,7 @@ Submit the generated records, creating the Solr collection if needed:
 On Windows:
 
 ```cmd
-py -3 submit_to_solr.py --submit
+submit_to_solr.cmd --submit
 ```
 
 To remove the old test collection, rebuild it, and load the generated records:
@@ -333,7 +333,7 @@ Run without arguments to display its syntax:
 On Windows:
 
 ```cmd
-py -3 generate_test_data_es.py
+generate_test_data_es.cmd
 ```
 
 Generate the same 1,000-record, 20%-incorrect fixture in ES format:
@@ -357,7 +357,7 @@ Submit the generated records, creating the ES index if needed:
 On Windows:
 
 ```cmd
-py -3 submit_to_es.py --submit
+submit_to_es.cmd --submit
 ```
 
 To remove the old test index, rebuild it, and load the generated records:
@@ -947,26 +947,24 @@ your working directory, and returns DQ's exit status. It uses `py.exe -3` to
 select Python 3. The wrapper has Windows CRLF line endings;
 execution on Windows has not yet been verified.
 
-### Running Other Python Scripts
+### Running Test Collection Scripts on Windows
 
-The same `py -3` prefix may be needed for other `.py` scripts shown in this
-README or the scripts' usage messages. For example, from the
-`generate_test_collection` directory, replace `./generate_test_data_solr.py`
-with:
+The four user-facing scripts in `generate_test_collection` have `.cmd`
+launchers. For example:
 
 ```bat
-py -3 generate_test_data_solr.py --rows 1000
+generate_test_data_solr.cmd --rows 1000
 ```
 
-Likewise, submit the generated data with:
+Submit the generated data with:
 
 ```bat
-py -3 submit_to_solr.py --submit
+submit_to_solr.cmd --submit
 ```
 
-Some Python files start with `#!/usr/bin/env python3`, a launcher line used on
-Linux/macOS. Using `py -3 script_name.py` explicitly selects Python 3 on Windows;
-you do not need to edit that line or rely on `.py` file associations.
+The corresponding Elasticsearch/OpenSearch launchers are
+`generate_test_data_es.cmd` and `submit_to_es.cmd`. Each launcher uses
+`py.exe -3`, forwards all arguments, and returns the Python script's exit status.
 
 ## Using HTTPS
 
