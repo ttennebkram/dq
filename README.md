@@ -292,22 +292,12 @@ To remove the old test collection, rebuild it, and load the generated records:
 ./submit_to_solr.py --recreate_collection
 ```
 
-Run a quick checkup on the test collection:
+To generate the same random data each time, which can simplify some tests, use
+`--seed SOME_NUMBER`.
 
-```sh
-../bin/dq --main_url http://localhost:8983/solr --collection dq_demo --report quick_checkup
-```
-
-Generated JSON stays in the current directory; reports use `reports_dir`.
-
-The loader resubmits matching IDs by default.
-
-Test-data generation is random by default. Omit `--seed` for a fresh run;
-use `--seed N` to reproduce one with the same options and generator/Python
-version. Every chosen seed is printed. Seeds `0`
-and `-1` are repeatable integer seeds, not special random modes.
-
-For special empty-string tests, enable preservation when submitting:
+One of the generated invalid values is an empty string, but Solr ignores such
+field values by default. For special empty-string tests, enable preservation
+when submitting:
 
 ```sh
 ./submit_to_solr.py --submit --preserve_empty_strings
