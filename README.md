@@ -5,7 +5,7 @@ DQ v2 is a **Data Quality Toolkit for Search Engines**, including Apache Solr, E
 
 **[Watch the DQ Introduction on YouTube](https://youtu.be/5gYDUyPIwW4)**
 
-[![Watch the DQ Data Quality Toolkit introduction](docs/images/data-quality-intro.png)](https://youtu.be/5gYDUyPIwW4)
+[![Watch the DQ Data Quality Toolkit introduction](docs/images/data-quality-intro-thumbnail.png)](https://youtu.be/5gYDUyPIwW4)
 
 DQ is a command-line tool: you use it by typing commands in a terminal window.
 That can be Terminal on macOS, a terminal on Linux, or Windows Terminal running
@@ -213,9 +213,12 @@ more detail and the `full_checkup` report.
 
 ## Generate a Test Collection
 
+**[Watch on YouTube](https://youtu.be/WMOTmwxxXxo)**
+
+[![Watch Generating Demo Data on YouTube](docs/images/data-quality-dq_demo-collection-thumbnail.png)](https://youtu.be/WMOTmwxxXxo)
+
 DQ generates and loads synthetic demo data into the `dq_demo` collection/index in
-Solr or Elasticsearch. Here, ES includes commercial and open-source Elasticsearch
-and OpenSearch. Skip this section to use your own data.
+either Solr, Elasticsearch, or OpenSearch. Skip this section to use your own data.
 
 The generated data contains synthetic personal and contact data with some
 deliberately invalid values. Emails use `example.com`, phone numbers use a fictional 555
