@@ -162,7 +162,8 @@ def main_url_has_collection(main_url):
 
 
 def write_config(path, main_url, collection, username=None, password=None, trust_certificate=None,
-                 include_fields=None, exclude_fields=None, preserve_optional=True, reports_dir=None, rows=None, progress_every=None, skip_null_values=None):
+                 include_fields=None, exclude_fields=None, preserve_optional=True, reports_dir=None, rows=None,
+                 progress_every=None, skip_null_values=None, write_runtime_defaults=True):
     """Atomically update target settings, commenting out changed old values."""
     normalized_main_url = main_url.rstrip('/')
     previous = _read_config(path) if os.path.isfile(path) else DqConfig()
@@ -172,10 +173,14 @@ def write_config(path, main_url, collection, username=None, password=None, trust
         progress_every = previous.progress_every
     if skip_null_values is None and preserve_optional:
         skip_null_values = previous.skip_null_values
+    if write_runtime_defaults:
+        rows = -1 if rows is None else rows
+        progress_every = 1000 if progress_every is None else progress_every
+        skip_null_values = False if skip_null_values is None else skip_null_values
     try:
-        skip_null_values = boolean_option(False if skip_null_values is None else skip_null_values)
-        rows = row_limit(-1 if rows is None else rows)
-        progress_every = progress_interval(1000 if progress_every is None else progress_every)
+        rows = row_limit(rows) if rows is not None else None
+        progress_every = progress_interval(progress_every) if progress_every is not None else None
+        skip_null_values = boolean_option(skip_null_values) if skip_null_values is not None else None
     except ValueError as error:
         raise ConfigError(str(error))
     lines = ['[DEFAULT]']
@@ -196,15 +201,18 @@ def write_config(path, main_url, collection, username=None, password=None, trust
             if '\n' in value or '\r' in value:
                 raise ConfigError('{0} must fit on one line'.format(name))
             lines.append('{0} = {1}'.format(name, value))
-    if previous.rows is not None and previous.rows != rows:
-        lines.append('# Previous rows = {0}'.format(previous.rows))
-    lines.append('rows = {0}'.format(rows))
-    if previous.progress_every is not None and previous.progress_every != progress_every:
-        lines.append('# Previous progress_every = {0}'.format(previous.progress_every))
-    lines.append('progress_every = {0}'.format(progress_every))
-    if previous.skip_null_values is not None and previous.skip_null_values != skip_null_values:
-        lines.append('# Previous skip_null_values = {0}'.format(str(previous.skip_null_values).lower()))
-    lines.append('skip_null_values = {0}'.format(str(skip_null_values).lower()))
+    if rows is not None:
+        if previous.rows is not None and previous.rows != rows:
+            lines.append('# Previous rows = {0}'.format(previous.rows))
+        lines.append('rows = {0}'.format(rows))
+    if progress_every is not None:
+        if previous.progress_every is not None and previous.progress_every != progress_every:
+            lines.append('# Previous progress_every = {0}'.format(previous.progress_every))
+        lines.append('progress_every = {0}'.format(progress_every))
+    if skip_null_values is not None:
+        if previous.skip_null_values is not None and previous.skip_null_values != skip_null_values:
+            lines.append('# Previous skip_null_values = {0}'.format(str(previous.skip_null_values).lower()))
+        lines.append('skip_null_values = {0}'.format(str(skip_null_values).lower()))
     for name, patterns in [('include_fields', include_fields), ('exclude_fields', exclude_fields)]:
         old_patterns = getattr(previous, name)
         if patterns is None:

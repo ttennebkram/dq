@@ -81,6 +81,11 @@ class WizardTests(unittest.TestCase):
             self.assertIn('Solr:          http://localhost:8983/solr', output)
             self.assertIn('Elasticsearch: http://localhost:9200', output)
             self.assertIn('OpenSearch:    http://localhost:9200', output)
+            with open(path) as stream:
+                contents = stream.read()
+            self.assertNotIn('rows =', contents)
+            self.assertNotIn('progress_every =', contents)
+            self.assertNotIn('skip_null_values =', contents)
 
     def test_existing_and_cli_collection_override_demo_default(self):
         with tempfile.TemporaryDirectory() as directory:

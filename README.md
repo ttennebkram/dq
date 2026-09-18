@@ -134,7 +134,8 @@ bin/dq --config_wizard
 The wizard asks for the URL, collection, and optional login, then asks for
 confirmation before saving.
 The wizard preserves saved values and accepts explicit CLI overrides. Enter keeps
-a default; `-` clears an optional value.
+a default; `-` clears an optional value. It omits less common runtime settings
+when they still use their built-in defaults.
 Leave the username blank if you are not using Basic authentication; the wizard
 will skip the password prompt. Blank is the default when no username is saved or supplied. Enter keeps a saved username;
 use `-` to clear it and its password when disabling Basic authentication.

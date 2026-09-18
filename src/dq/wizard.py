@@ -19,11 +19,14 @@ def _ask(label, default=None, secret=False):
 
 def run_wizard(options):
     # Like --write_config, use only the destination file, not environment/parent defaults.
-    from dq.settings import _resolve_field_filters, resolve_rows, resolve_progress_every, resolve_skip_null_values
+    from dq.settings import _resolve_field_filters
     path = absolute_path(options.config or 'dq.ini')
     exists = os.path.isfile(path)
     config = load_config(path) if exists else DqConfig()
-    rows = resolve_rows(options, config)
+    rows = options.rows if options.rows is not None else config.rows
+    progress_every = options.progress_every if options.progress_every is not None else config.progress_every
+    skip_null_values = (options.skip_null_values if options.skip_null_values is not None
+                        else config.skip_null_values)
     print('Configuration Wizard')
     print('--------------------')
     print('This wizard will {0}: {1}'.format('update' if exists else 'create', path))
@@ -85,7 +88,8 @@ def run_wizard(options):
     exclude = options.exclude_fields if options.field_filter_sources['exclude_fields'] != 'built-in default' else None
     print('\nConfiguration to save: {0}'.format(path))
     print('Target: {0}'.format(target))
-    print('rows: {0}{1}'.format(rows, ' (no limit)' if rows == -1 else ' (source documents per scan)'))
+    if rows is not None:
+        print('rows: {0}{1}'.format(rows, ' (no limit)' if rows == -1 else ' (source documents per scan)'))
     for name in ('username', 'password', 'trust_certificate'):
         value = values[name]
         if name == 'trust_certificate' and not value:
@@ -104,7 +108,9 @@ def run_wizard(options):
         print('Please enter yes or no.')
     write_config(path, url, collection, include_fields=include, exclude_fields=exclude,
                  preserve_optional=False,
-                 reports_dir=getattr(options, 'reports_dir', None) if getattr(options, 'reports_dir', None) is not None else config.reports_dir, rows=rows, progress_every=resolve_progress_every(options, config), skip_null_values=resolve_skip_null_values(options, config), **values)
+                 reports_dir=getattr(options, 'reports_dir', None) if getattr(options, 'reports_dir', None) is not None else config.reports_dir,
+                 rows=rows, progress_every=progress_every, skip_null_values=skip_null_values,
+                 write_runtime_defaults=False, **values)
     if exists:
         print('Merging with existing configuration: {0}'.format(path))
     else:
