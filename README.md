@@ -222,7 +222,7 @@ either Solr, Elasticsearch, or OpenSearch. Skip this section to use your own dat
 
 The generated data contains synthetic personal and contact data with some
 deliberately invalid values. Emails use `example.com`, phone numbers use a fictional 555
-range, and SSN-shaped values must never be used as identities.
+range, and all generated values are fictional and intended only for testing.
 `--incorrect_percent` injects some invalid values.
 
 From the main DQ project directory, go to `generate_test_collection/`:
