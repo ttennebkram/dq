@@ -3,6 +3,10 @@ DQ v2
 
 DQ v2 is a **Search Engine Data Quality Toolkit** for Apache Solr, Elasticsearch, and OpenSearch. GitHub repository: [https://github.com/ttennebkram/dq](https://github.com/ttennebkram/dq).
 
+**[Watch the DQ Introduction on YouTube](https://youtu.be/5gYDUyPIwW4)**
+
+[![Watch the DQ Data Quality Toolkit introduction](docs/images/data-quality-intro.png)](https://youtu.be/5gYDUyPIwW4)
+
 DQ is a command-line tool: you use it by typing commands in a terminal window.
 That can be Terminal on macOS, a terminal on Linux, or Windows Terminal running
 PowerShell or Command Prompt on Windows.
@@ -1393,6 +1397,7 @@ The main project directories and files are:
 | <nobr><code>├── bin/</code></nobr> | DQ command-line launchers for macOS, Linux, and Windows. |
 | <nobr><code>│   └── aux-bin/</code></nobr> | Optional helper scripts for managing a local Solr installation. |
 | <nobr><code>├── docs/</code></nobr> | Additional reference material. In this version, most documentation is in the main `README.md` file. |
+| <nobr><code>│   └── images/</code></nobr> | Video thumbnail and search-engine logo assets. |
 | <nobr><code>├── generate_test_collection/</code></nobr> | Generates fake test data and submits it to Solr, Elasticsearch, or OpenSearch. |
 | <nobr><code>├── reports/</code></nobr> | Default destination for generated Markdown and CSV output. |
 | <nobr><code>│   └── processing-stats.jsonl</code></nobr> | Append-only JSON Lines history of scan measurements, including the engine, fields, document count, elapsed time, and processing rate. It is generated at runtime and ignored by Git. |
