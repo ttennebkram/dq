@@ -1,7 +1,7 @@
 DQ v2
 -----
 
-DQ v2 is a **Search Engine Data Quality Toolkit** for Apache Solr, Elasticsearch, and OpenSearch. GitHub repository: [https://github.com/ttennebkram/dq](https://github.com/ttennebkram/dq).
+DQ v2 is a **Data Quality Toolkit for Search Engines**, including Apache Solr, Elasticsearch, and OpenSearch. GitHub repository: [https://github.com/ttennebkram/dq](https://github.com/ttennebkram/dq).
 
 **[Watch the DQ Introduction on YouTube](https://youtu.be/5gYDUyPIwW4)**
 
