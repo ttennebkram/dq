@@ -213,9 +213,9 @@ more detail and the `full_checkup` report.
 
 ## Generate a Test Collection
 
-**[Watch on YouTube](https://youtu.be/WMOTmwxxXxo)**
+**[Watch on YouTube](https://youtu.be/KPgDUQL014w)**
 
-[![Watch Generating Demo Data on YouTube](docs/images/data-quality-dq_demo-collection-thumbnail.png)](https://youtu.be/WMOTmwxxXxo)
+[![Watch Generating Demo Data on YouTube](docs/images/data-quality-dq_demo-collection-thumbnail.png)](https://youtu.be/KPgDUQL014w)
 
 DQ generates and loads synthetic demo data into the `dq_demo` collection/index in
 either Solr, Elasticsearch, or OpenSearch. Skip this section to use your own data.

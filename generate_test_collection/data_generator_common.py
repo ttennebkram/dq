@@ -156,4 +156,8 @@ Generated Fields: """ + ', '.join(FIELDS))
                 stream.write(json.dumps(doc, ensure_ascii=False, sort_keys=True) + '\n')
     print('Data file: ' + os.path.join(args.data_files_dir, payload_name))
     print('Generated {0} synthetic documents; seed: {1}.'.format(args.rows, seed))
-    print('Repeat with --seed {0} and the same options.'.format(seed))
+    print('')
+    if backend == 'es':
+        print('REMINDER: Submit {0} to Elasticsearch/OpenSearch with submit_to_es.py --submit'.format(payload_name))
+    else:
+        print('REMINDER: Submit {0} to Solr with submit_to_solr.py --submit'.format(payload_name))
