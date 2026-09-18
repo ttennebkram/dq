@@ -330,11 +330,11 @@ On Windows:
 .\generate_test_data_es.cmd
 ```
 
-Generate the same 1,000-record, 20%-incorrect fixture in ES format. The default
-value for `--incorrect_percent` is `20`; it is shown explicitly here:
+Generate 1,000 records in ES format. `--rows` is required; `1_000` is the
+example size. The default value for `--incorrect_percent` is `20`:
 
 ```sh
-./generate_test_data_es.py --rows 1_000 --incorrect_percent 20
+./generate_test_data_es.py --rows 1_000
 ```
 
 Check the generated ES data file:
@@ -343,7 +343,7 @@ Check the generated ES data file:
 ls -l documents_es.ndjson
 ```
 
-Submit the generated records, creating the ES index if needed:
+Submit the generated records to Elasticsearch/OpenSearch, creating the index if needed:
 
 ```sh
 ./submit_to_es.py --submit
