@@ -270,7 +270,7 @@ setting:
 ./generate_test_data_solr.py --rows 1_000
 ```
 
-To override the default and generate 50% incorrect values:
+To override the default of 20% and generate 50% incorrect values:
 
 ```sh
 ./generate_test_data_solr.py --rows 1_000 --incorrect_percent 50
