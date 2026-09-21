@@ -1464,6 +1464,9 @@ Run only the regex rule with:
 bin/dq --rule part_number_example_base --include_field part_number_s --rows 1_000
 ```
 
+This creates `reports/part_number_s_part_number_example_base.csv` when using
+the default reports directory.
+
 Add `--skip_null_values true` to report only actual string values that fail the
 regex. Empty and whitespace-only strings remain string values and are still
 tested.
