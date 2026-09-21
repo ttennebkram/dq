@@ -263,10 +263,17 @@ On Windows, use the matching command launcher:
 ```
 
 **Generate Data Example:** `--rows` is required; `--size` is equivalent. The
-following command generates 1,000 records with a 20% incorrect-value setting:
+following command generates 1,000 records using the default 20% incorrect-value
+setting:
 
 ```sh
-./generate_test_data_solr.py --rows 1_000 --incorrect_percent 20
+./generate_test_data_solr.py --rows 1_000
+```
+
+To override the default and generate 50% incorrect values:
+
+```sh
+./generate_test_data_solr.py --rows 1_000 --incorrect_percent 50
 ```
 
 `--rows` can be `1000` or `1_000`. The underscore notation works in this code
