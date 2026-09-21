@@ -10,9 +10,24 @@ from types import SimpleNamespace
 loader = runpy.run_path(os.path.join(os.path.dirname(__file__), '..', 'generate_test_collection', 'submit_to_solr.py'))
 prepare = loader['prepare_collection']
 solr_base = loader['solr_base']
+validate_dynamic_fields = loader['validate_dynamic_fields']
 
 
 class DemoLoaderTests(unittest.TestCase):
+    def test_required_dynamic_fields_are_validated(self):
+        response = {'dynamicFields': [
+            {'name': '*_t', 'type': 'text_general'},
+            {'name': '*_s', 'type': 'string'},
+            {'name': '*_dt', 'type': 'pdate'}]}
+        with patch.dict(validate_dynamic_fields.__globals__,
+                        get_json=Mock(return_value=response)):
+            self.assertIsNone(validate_dynamic_fields('url', None))
+        response['dynamicFields'][0]['type'] = 'string'
+        with patch.dict(validate_dynamic_fields.__globals__,
+                        get_json=Mock(return_value=response)), \
+                self.assertRaisesRegex(ValueError, r'\*_t -> text_general'):
+            validate_dynamic_fields('url', None)
+
     def test_elasticsearch_url_is_rejected(self):
         config = type('Config', (), {'main_url': 'http://localhost:9200'})()
         with self.assertRaisesRegex(ValueError, 'must identify Solr'):
@@ -106,12 +121,13 @@ class DemoLoaderTests(unittest.TestCase):
                         load_config=Mock(return_value=config),
                         Connection=Mock(return_value=connection),
                         prepare_collection=Mock(return_value=True),
+                        validate_dynamic_fields=Mock(),
                         get_json=Mock(return_value=cluster)), \
                 patch('sys.stdout', io.StringIO()):
             self.assertEqual(loader['main']([
                 '--recreate_collection', '--data_files_dir', '/missing']), 0)
         urls = [call[0][0].full_url for call in connection.open.call_args_list]
-        self.assertTrue(any(url.endswith('/schema') for url in urls))
+        self.assertFalse(any(url.endswith('/schema') for url in urls))
         self.assertTrue(any(url.endswith('/config') for url in urls))
         self.assertFalse(any('/update' in url for url in urls))
 

@@ -31,8 +31,8 @@ class ValueStateRuleTests(unittest.TestCase):
         field = {'name': 'email_t', 'stored': True, 'type': 'text_general'}
         values = iter([('a', 'email_t', False), ('b', 'email_t', True),
                        ('c', 'email_t', True)])
-        with patch('dq.rules.missing_fields_base.processor.list_fields', return_value=[field]), \
-                patch('dq.stored.values', return_value=values):
+        with patch('dq.rules.chain.stored.fields', return_value=[field]), \
+                patch('dq.rules.chain.stored.values', return_value=values):
             export = load_handler('missing_fields_base', 'csv')('url', row_limit=3)
             self.assertEqual(export.header, ['id', 'reason', 'value'])
             self.assertEqual(records(export),
@@ -47,9 +47,8 @@ class ValueStateRuleTests(unittest.TestCase):
                 ('whitespace_only_base', [
                     ('b', 'whitespace_only_base: whitespace-only string', ' '),
                     ('c', 'whitespace_only_base: whitespace-only string', '\t\n')])]:
-            module = 'dq.rules.' + name + '.processor'
-            with patch(module + '.stored.fields', return_value=[field]), \
-                    patch(module + '.stored.values', return_value=iter(source)):
+            with patch('dq.rules.chain.stored.fields', return_value=[field]), \
+                    patch('dq.rules.chain.stored.values', return_value=iter(source)):
                 self.assertEqual(records(load_handler(name, 'csv')('url')), expected)
 
     def test_missing_fields_base_combines_with_other_rules_in_one_record_scan(self):

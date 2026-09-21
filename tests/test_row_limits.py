@@ -149,7 +149,7 @@ class ScanLimitTests(unittest.TestCase):
         responses = [{'uniqueKey': 'id'}, page([{'dq_key': 'a', 'dq_value0': [' ', '\t']}], 'one')]
         with tempfile.TemporaryDirectory() as directory, \
                 patch('dq.actions.load_config', return_value=DqConfig(main_url='http://solr/c', rows=100)), \
-                patch('dq.rules.whitespace_only_base.processor.stored.fields', return_value=[{'name': 'f', 'stored': True, 'type': 'string'}]), \
+                patch('dq.rules.chain.stored.fields', return_value=[{'name': 'f', 'stored': True, 'type': 'string'}]), \
                 patch('dq.stored.get_json', side_effect=responses) as get, \
                 patch('sys.stdout', io.StringIO()) as out, patch('sys.stderr', io.StringIO()) as err:
             self.assertEqual(main(['--rule', 'whitespace_only_base', '--action', 'csv', '--size', '1', '--reports_dir', directory]), 0)
@@ -167,7 +167,7 @@ class ScanLimitTests(unittest.TestCase):
         field = {'name': 'embedding', 'stored': True, 'typeClass': 'solr.DenseVectorField'}
         responses = [{'uniqueKey': 'id'}, page([
             {'dq_key': 'a', 'dq_value0': True}, {'dq_key': 'b', 'dq_value0': False}], 'one')]
-        with patch('dq.rules.missing_fields_base.processor.list_fields', return_value=[field]), \
+        with patch('dq.rules.chain.stored.fields', return_value=[field]), \
                 patch('dq.stored.get_json', side_effect=responses) as get, patch('sys.stderr', io.StringIO()):
             header, pages = load_handler('missing_fields_base', 'csv')('url', row_limit=2)
             records = [row for batch in pages for row in batch]
@@ -175,7 +175,7 @@ class ScanLimitTests(unittest.TestCase):
         self.assertEqual(get.call_args[1]['fl'], 'dq_key:id,dq_value0:exists(embedding)')
         self.assertNotIn('fq', get.call_args[1])
         # An absent presence flag is a failed response, not evidence of presence.
-        with patch('dq.rules.missing_fields_base.processor.list_fields', return_value=[field]), \
+        with patch('dq.rules.chain.stored.fields', return_value=[field]), \
                 patch('dq.stored.get_json', side_effect=[{'uniqueKey': 'id'}, page([{'dq_key': 'a'}], 'one')]), \
                 patch('sys.stderr', io.StringIO()):
             _, pages = load_handler('missing_fields_base', 'csv')('url', row_limit=1)
@@ -228,7 +228,7 @@ class ReportLimitTests(unittest.TestCase):
                 report = stream.read()
             self.assertIn('Documents: 1,000', report)
             self.assertIn('to scan up to 3 records and all selected fields', report)
-            self.assertIn('Presence counts cover the entire collection', report)
+            self.assertNotIn('Presence counts cover the entire collection', report)
             self.assertIn('100', report)
 
     def test_full_scan_limit_and_detail_scope(self):

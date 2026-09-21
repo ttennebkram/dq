@@ -4,47 +4,34 @@
     "number_of_replicas": 0
   },
   "mappings": {
-    "dynamic": "strict",
+    "dynamic": true,
+    "dynamic_templates": [
+      {
+        "dq_text_fields": {
+          "match": "*_t",
+          "mapping": {
+            "type": "text"
+          }
+        }
+      },
+      {
+        "dq_string_fields": {
+          "match": "*_s",
+          "mapping": {
+            "type": "keyword"
+          }
+        }
+      },
+      {
+        "dq_date_fields": {
+          "match": "*_dt",
+          "mapping": {
+            "type": "date"
+          }
+        }
+      }
+    ],
     "properties": {
-      "first_name_t": {
-        "type": "text"
-      },
-      "last_name_t": {
-        "type": "text"
-      },
-      "street_address_t": {
-        "type": "text"
-      },
-      "city_t": {
-        "type": "text"
-      },
-      "state_t": {
-        "type": "text"
-      },
-      "postal_code_t": {
-        "type": "text"
-      },
-      "country_t": {
-        "type": "text"
-      },
-      "email_t": {
-        "type": "text"
-      },
-      "phone_t": {
-        "type": "text"
-      },
-      "ssn_t": {
-        "type": "text"
-      },
-      "part_number_s": {
-        "type": "keyword"
-      },
-      "event_date_dt": {
-        "type": "date"
-      },
-      "notes_t": {
-        "type": "text"
-      },
       "id": {
         "type": "keyword"
       }

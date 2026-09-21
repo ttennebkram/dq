@@ -3,6 +3,7 @@ import configparser
 import os
 import re
 from dq.errors import ReportError
+from dq.rules.metadata import read_metadata
 
 
 def _builtin_paths():
@@ -22,13 +23,24 @@ def read_definition(path, allow_unrelated=False):
     try:
         with open(path, encoding='utf-8') as stream:
             parser.read_file(stream)
-        if allow_unrelated and not parser.has_section('rule'):
+        if allow_unrelated and not parser.has_section('base_rule'):
+            if parser.has_section('composite_rule'):
+                raise ValueError('_base directory cannot contain [composite_rule]')
             return None
-        defaults = dict(parser.items('rule'))
+        if not parser.has_section('base_rule'):
+            raise ValueError('expected a [base_rule] section')
+        if parser.has_section('composite_rule'):
+            raise ValueError('_base directory cannot contain [composite_rule]')
+        metadata = read_metadata(parser)
+        regex_sections = [section for section in parser.sections()
+                          if section.startswith('regex:')]
+        if allow_unrelated and not regex_sections:
+            return None
+        defaults = dict(parser.items('base_rule'))
         name = os.path.basename(os.path.dirname(os.path.abspath(path)))
         if not re.match(r'^[a-z][a-z0-9_]*$', name):
             raise ValueError('rule directory name must use lowercase letters, digits, and underscores')
-        allowed = {'description', 'report'}
+        allowed = {'report'}
         if set(defaults) - allowed:
             raise ValueError('unknown rule setting: ' + ', '.join(sorted(set(defaults) - allowed)))
         report = defaults.get('report')
@@ -37,7 +49,7 @@ def read_definition(path, allow_unrelated=False):
         rules = []
         pattern_paths = []
         for section in parser.sections():
-            if section == 'rule':
+            if section in ('rule', 'base_rule'):
                 continue
             if not re.match(r'^regex:regex[0-9]{2}$', section):
                 raise ValueError('expected a numbered [regex:regex01] section')
@@ -80,9 +92,9 @@ def read_definition(path, allow_unrelated=False):
             raise ValueError('at least one numbered [regex:regex01] section is required')
         if len(set(rule[0] for rule in rules)) != len(rules):
             raise ValueError('duplicate regex check name')
-        return {'name': name, 'description': defaults.get('description', name),
-                'rule_type': 'base', 'report': report, 'rules': rules,
-                'pattern_paths': pattern_paths, 'path': os.path.abspath(path)}
+        return dict(metadata, name=name, rule_type='base', report=report,
+                    rules=rules, pattern_paths=pattern_paths,
+                    path=os.path.abspath(path))
     except (OSError, configparser.Error, ValueError, re.error) as error:
         raise ReportError('invalid rule INI file {0}: {1}'.format(path, error)) from error
 

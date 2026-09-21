@@ -6,7 +6,7 @@ from urllib.parse import unquote, urlsplit
 from dq.progress import Progress
 from dq.csv_files import FieldCsvFiles
 from dq.files import write_text, field_rule_output_paths, display_path
-from dq.limits import scan_scope, PRESENCE_SCOPE
+from dq.limits import scan_scope
 from dq.field_selection import select_fields, DEFAULT_EXCLUDED_FIELDS
 from dq.search import list_fields, collection_document_count, field_document_count, engine_name
 from dq.errors import ReportError
@@ -99,7 +99,8 @@ def write_report(target, output_path, *, include=(), exclude=(), connection=None
     elapsed = max(0.0, time.monotonic() - progress.started)
     lines = ['# Automatic Checkup — Full', '', 'Report: ' + _code(report_name), '', '- [Summary](#summary)', '- [Options Used](#options-used)',
              '- [Fields](#fields)', '', '## Summary', '',
-             '- Collection: ' + _code(target), '- Documents: {0:,}'.format(total),
+             '- Collection: ' + _code(_target_name(target)),
+             '- Documents: {0:,}'.format(total),
              '- Selected stored fields: ' + '{0:,}'.format(len(selected)),
              '- Full report runtime: ' + _runtime(elapsed),
              '- Include patterns: ' + _code(', '.join(include) or '*'),
@@ -167,24 +168,32 @@ def _write_lite(target, output_path, selected, plans, total, missing, options,
     for field in selected:
         name = field['name']
         suggestions = ordered_checks(set(plans[name]) - {'missing_fields_base'})
+        suggestion_text = ', '.join(suggestions)
+        automatic_matches = getattr(plans[name], 'automatic_matches', ())
+        automatic_selected = getattr(plans[name], 'automatic_selected', None)
+        if len(automatic_matches) > 1:
+            alternatives = ['{0} ({1})'.format(rule, pattern)
+                            for rule, pattern in automatic_matches
+                            if rule != automatic_selected]
+            suggestion_text = ('{0} (selected; also matched {1})'.format(
+                automatic_selected, ', '.join(alternatives)))
         rows.append((_code(name), _code(str(field.get('type', 'unknown'))),
                      '{0:,}'.format(total - missing[name]) if name in missing else 'not checked',
                      '{0:,}'.format(missing[name]) if name in missing else 'not checked',
-                     ', '.join(suggestions) or ('missing_fields_base' if 'missing_fields_base' in plans[name] else 'Disabled')))
+                     suggestion_text or ('missing_fields_base' if 'missing_fields_base' in plans[name] else 'Disabled')))
     lines = ['# Automatic Checkup — Quick', '', 'Report: ' + _code(report_name), '',
              '- [Run Additional Checks](#run-additional-checks)',
              '- [Summary](#summary)', '- [Options Used](#options-used)', '- [Fields](#fields)', '']
     lines += _followup_examples(target, selected, plans, total, configuration, explicit, row_limit)
     lines += ['## Summary', '',
-             '- Scope: document counts for each selected field.',
-             '- Collection: ' + _code(target), '- Documents: {0:,}'.format(total),
+             '- Check performed: count documents with and without a value for each selected field.',
+             '- Collection: ' + _code(_target_name(target)),
+             '- Documents: {0:,}'.format(total),
              '- Selected stored fields: ' + '{0:,}'.format(len(selected)),
              '- Include patterns: ' + _code(', '.join(include) or '*'),
              '- Exclude patterns: ' + _code(', '.join(exclude if include or exclude else DEFAULT_EXCLUDED_FIELDS) or 'none'),
              '']
     lines += source_links(target)
-    lines += ['Document counts come from {0} field-presence queries, counting each document once per field.'.format(engine_name(target)),
-              'Native date and vector fields receive collection-wide presence counts here; full_checkup runs missing_fields_base row by row.', PRESENCE_SCOPE, '']
     current_total = collection_document_count(target, connection=connection)
     lines += ['## Options Used', '']
     if configuration:
@@ -194,7 +203,7 @@ def _write_lite(target, output_path, selected, plans, total, missing, options,
     lines += ['', '## Fields', '',
               'Fields in collection/index ' + _code(_target_name(target)) +
               ', which contains {0:,} documents:'.format(current_total), '']
-    lines += _table(('Field', 'Field type', 'Docs w/Value', 'Docs w/o Value', 'Additional checks in full report'), rows)
+    lines += _table(('Field', 'Field type', 'Docs w/Value', 'Docs w/o Value', 'Matching Rule'), rows)
     write_text(output_path, '\n'.join(_results_first(lines)) + '\n')
 
 
@@ -206,7 +215,7 @@ def _followup_examples(target, selected, plans, total, configuration, configurat
              'bin/dq --report full_checkup', '```', '']
     lines += _full_workload(selected, plans, total, row_limit=row_limit,
                             engine=engine_name(target))
-    lines += ['For large collections, during testing, limit records with `--rows` or '
+    lines += ['For large collections, during testing, consider limiting records with `--rows` or '
               '`--size`.', '', '```sh',
               'bin/dq --report full_checkup --rows 1000', '```', '']
     base = ['bin/dq']
@@ -218,8 +227,8 @@ def _followup_examples(target, selected, plans, total, configuration, configurat
         name = field['name']
         checks = [check for check in ordered_checks(plans[name])
                   if check != 'missing_fields_base']
-        specialized = [check for check in checks if check in
-                       ('email_composite', 'us_phone_composite', 'ssn_composite')]
+        specialized = [check for check in checks
+                       if 'field-name pattern' in plans[name].get(check, '')]
         rule = (specialized or checks or
                 (['missing_fields_base'] if 'missing_fields_base' in plans[name] else [None]))[0]
         example_type = (str(field.get('type', 'unknown')), rule)
@@ -233,4 +242,5 @@ def _followup_examples(target, selected, plans, total, configuration, configurat
         literal = ''.join({'*': '[*]', '?': '[?]', '[': '[[]'}.get(char, char) for char in name)
         command = base + ['--include_field', literal, '--rule', rule]
         commands.append(' '.join(shlex.quote(part) for part in command))
-    return lines + ['### Analyze Specific Fields', '', '```sh'] + commands + ['```', '']
+    return lines + ['### Analyze Specific Fields with Specific Rules', '',
+                    '```sh'] + commands + ['```', '']

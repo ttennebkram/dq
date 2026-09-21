@@ -1,16 +1,56 @@
-"""Predefined composite rules and deterministic expansion to base rules."""
+"""Load predefined composite rules and expand them to ordered base rules."""
 from collections import OrderedDict
+import configparser
+import os
+import re
+
 from dq.errors import ReportError
-from dq.rules import (standard_text_composite, email_composite,
-                      us_phone_composite, ssn_composite,
-                      part_number_example_composite)
+from dq.rules.metadata import read_metadata
 
 
-_MODULES = (standard_text_composite, email_composite, us_phone_composite,
-            ssn_composite, part_number_example_composite)
-COMPOSITES = OrderedDict(
-    (module.NAME, {'description': module.DESCRIPTION, 'rules': module.RULES})
-    for module in _MODULES)
+RULES_DIRECTORY = os.path.dirname(__file__)
+
+
+def _load_composites():
+    """Load directory-named composite rules from their INI files."""
+    result = OrderedDict()
+    for name in sorted(os.listdir(RULES_DIRECTORY)):
+        if not name.endswith('_composite'):
+            continue
+        if not re.match(r'^[a-z][a-z0-9_]*$', name):
+            raise ReportError('invalid composite rule directory: ' + name)
+        path = os.path.join(RULES_DIRECTORY, name, 'rule.ini')
+        if not os.path.isfile(path):
+            raise ReportError('{0} composite rule must contain rule.ini'.format(name))
+        parser = configparser.ConfigParser(interpolation=None)
+        try:
+            with open(path, encoding='utf-8') as stream:
+                parser.read_file(stream)
+            if parser.has_section('base_rule'):
+                raise ValueError('_composite directory cannot contain [base_rule]')
+            if not parser.has_section('composite_rule'):
+                raise ValueError('expected a [composite_rule] section')
+            metadata = read_metadata(parser)
+            values = dict(parser.items('composite_rule'))
+            unknown = set(values) - {'rules'}
+            if unknown:
+                raise ValueError('unknown composite rule setting: ' +
+                                 ', '.join(sorted(unknown)))
+            rules = tuple(item for item in re.split(r'[\s,]+', values.get('rules', '').strip())
+                          if item)
+            if not rules:
+                raise ValueError('at least one component rule is required')
+            if any(not re.match(r'^[a-z][a-z0-9_]*_(base|composite)$', item)
+                   for item in rules):
+                raise ValueError('component names must end in _base or _composite')
+        except (OSError, configparser.Error, ValueError) as error:
+            raise ReportError('invalid composite rule INI file {0}: {1}'.format(
+                path, error)) from error
+        result[name] = dict(metadata, rules=rules, path=path)
+    return result
+
+
+COMPOSITES = _load_composites()
 
 
 def expand(names, base_names):

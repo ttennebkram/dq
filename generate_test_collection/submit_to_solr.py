@@ -18,6 +18,37 @@ from dq.solr import get_json
 BATCH_SIZE = 5000
 
 
+def required_dynamic_fields():
+    """Read the suffix-based field definitions required by generated demo data."""
+    path = os.path.join(os.path.dirname(__file__), 'schema_solr.json')
+    with open(path, encoding='utf-8') as stream:
+        definitions = json.load(stream).get('required_dynamic_fields')
+    if not isinstance(definitions, list):
+        raise ValueError('schema_solr.json must contain required_dynamic_fields')
+    return definitions
+
+
+def validate_dynamic_fields(collection_url, connection):
+    """Require the _default configset mappings used by optional demo fields."""
+    response = get_json(collection_url, 'schema/dynamicfields', connection=connection,
+                        showDefaults='true', wt='json')
+    fields = response.get('dynamicFields')
+    if not isinstance(fields, list):
+        raise ValueError('Solr Schema API did not return dynamic fields')
+    available = dict((str(field.get('name')), str(field.get('type')))
+                     for field in fields if isinstance(field, dict))
+    missing = []
+    for required in required_dynamic_fields():
+        name = str(required.get('name'))
+        expected = str(required.get('type'))
+        actual = available.get(name)
+        if actual != expected:
+            missing.append('{0} -> {1} (found {2})'.format(
+                name, expected, actual if actual is not None else 'nothing'))
+    if missing:
+        raise ValueError('dq_demo requires Solr dynamic fields: ' + '; '.join(missing))
+
+
 def solr_base(config):
     """Resolve only the Solr server root; ignore any configured collection."""
     if not config.main_url or not is_solr_target(config.main_url):
@@ -126,10 +157,6 @@ def main(argv=None):
             parser.error('documents_solr.json must contain documents with nonempty string IDs')
         if len(set(d['id'] for d in documents)) != len(documents):
             parser.error('documents_solr.json contains duplicate IDs')
-    setup = []
-    for filename, endpoint in [('schema_solr.json', 'schema')]:
-        with open(os.path.join(os.path.dirname(__file__), filename), encoding='utf-8') as stream:
-            setup.append((endpoint, json.load(stream)))
     config = load_config()
     try:
         base = solr_base(config)
@@ -143,14 +170,12 @@ def main(argv=None):
     connection = Connection(config.username, config.password, cert)
     created = prepare_collection(base, connection, args.recreate_collection)
     target = base + '/dq_demo'
+    validate_dynamic_fields(target, connection)
     def post(path, payload):
         request = Request(target + '/' + path, data=json.dumps(payload).encode('utf-8'),
                           headers={'Content-Type':'application/json'})
         with connection.open(request) as response:
             return json.loads(response.read().decode('utf-8'))
-    if created:
-        for endpoint, payload in setup:
-            post(endpoint, payload)
     # Never change a shared or unrelated configset through the demo endpoint.
     cluster = get_json(base, 'admin/collections', connection=connection, action='CLUSTERSTATUS', wt='json')['cluster']['collections']
     config_name = cluster['dq_demo'].get('configName')

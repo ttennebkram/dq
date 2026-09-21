@@ -1,7 +1,7 @@
 """Shared text checks preserve ordering and do not duplicate fetching or findings."""
 import unittest
 from unittest.mock import patch
-from dq.rules._text.processor import value_reasons
+from dq.rules.text.processor import value_reasons
 from dq.reports._checkup.processor import scan
 from dq.rules.regex.engine import findings
 from dq.rules.regex.definitions import definitions
@@ -45,7 +45,7 @@ class CompositionTests(unittest.TestCase):
                 _, pages = load_handler([rule], 'csv')('url')
                 outputs[rule] = [row for page in pages for row in page]
         self.assertTrue(outputs['email_base'][0][1].startswith('email_base: no configured regex matched'))
-        self.assertTrue(outputs['email_base'][1][1].startswith('email_base: no configured regex matched'))
+        self.assertEqual(outputs['email_base'][1][1], 'email_base: null value')
         self.assertTrue(outputs['email_composite'][0][1].startswith('surrounding_whitespace_base:'))
         self.assertTrue(outputs['email_composite'][1][1].startswith('missing_fields_base:'))
 
@@ -55,7 +55,7 @@ class CompositionTests(unittest.TestCase):
         self.assertEqual(len(result), 1)
         self.assertTrue(value_reasons('\ufffd\u200b\ue000')[0].startswith('code_points_base:'))
         self.assertEqual(value_reasons('\ufffd\ue000'), [])
-        with patch('dq.rules._text.processor.reasons') as unicode:
+        with patch('dq.rules.text.processor.procedural_failure_reason') as unicode:
             expected = [(None, 'missing_fields_base: missing or null'),
                         ('', 'empty_strings_base: empty string'),
                         (' \t', 'whitespace_only_base: whitespace-only string')]
@@ -87,8 +87,8 @@ class CompositionTests(unittest.TestCase):
         self.assertEqual([r[0] for r in rows],['3'])
 
     def test_code_points_base_standalone_is_unicode_only(self):
-        with patch('dq.rules.code_points_base.processor.fields', return_value=[{'name':'id'}]), \
-             patch('dq.stored.values',return_value=iter([
+        with patch('dq.rules.chain.stored.fields', return_value=[{'name':'id', 'type':'string'}]), \
+             patch('dq.rules.chain.stored.values',return_value=iter([
                  ('1','id',''),('2','id',' x '),('3','id','\ufffd\u200b\ue000')])) as fetch:
             _, pages = load_handler('code_points_base','csv')('url',include=['id'])
             rows = [row for page in pages for row in page]

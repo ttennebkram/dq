@@ -10,12 +10,63 @@ from dq.reports.checkup import write_report
 
 class CheckupTests(unittest.TestCase):
     def test_names_types_and_no_substring_matches(self):
-        for name, expected in [('phone_s','us_phone_composite'), ('primaryEmail_s','email_composite'), ('social_security_s','ssn_composite')]:
+        for name, expected in [('phone_s','us_phone_composite'),
+                               ('primaryEmail_s','email_composite'),
+                               ('social_security_s','ssn_composite'),
+                               ('legacyPartNumber','part_number_example_composite')]:
             self.assertIn(expected, plan({'name':name, 'typeClass':'solr.StrField'}))
         self.assertNotIn('us_phone_composite', plan({'name':'microphone_s', 'typeClass':'solr.StrField'}))
+        self.assertNotIn('us_phone_composite', plan({'name':'microphone_text', 'typeClass':'solr.StrField'}))
         self.assertNotIn('email_composite', plan({'name':'email_count', 'type':'pint'}))
         self.assertEqual(list(plan({'name':'created','type':'pdate'})), ['missing_fields_base'])
         self.assertNotIn('date_checker', plan({'name':'event_date_t','type':'text_general'}))
+
+    def test_multiple_automatic_matches_choose_one_deterministically(self):
+        checks = plan({'name': 'email_phone_t', 'typeClass': 'solr.StrField'})
+        self.assertIn('email_composite', checks)
+        self.assertNotIn('us_phone_composite', checks)
+        self.assertEqual(checks.automatic_selected, 'email_composite')
+        self.assertEqual(checks.automatic_matches,
+                         (('email_composite', 'email'),
+                          ('us_phone_composite', 'phone')))
+
+        three_matches = plan({'name': 'email_part_number_t',
+                              'typeClass': 'solr.StrField'})
+        self.assertEqual(three_matches.automatic_selected, 'email_composite')
+        self.assertEqual(three_matches.automatic_matches,
+                         (('email_composite', 'email'),
+                          ('part_number_example_composite', 'part + number')))
+
+    def test_base_rule_can_advertise_automatic_matching(self):
+        rules = {
+            'account_code_base': {
+                'automatic_field_types': ('text',),
+                'automatic_field_name_patterns': (('account', 'code'),),
+                'path': '/example/account_code_base/rule.ini',
+            },
+        }
+        with patch('dq.reports._checkup.processor._automatic_rules',
+                   return_value=rules):
+            checks = plan({'name': 'legacyAccountCode',
+                           'typeClass': 'solr.StrField'})
+        self.assertEqual(list(checks),
+                         ['missing_fields_base', 'account_code_base'])
+
+    def test_quick_checkup_table_logs_multiple_matches_and_selection(self):
+        field = {'name': 'email_phone_t', 'type': 'text_general',
+                 'typeClass': 'solr.TextField', 'stored': True}
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, 'quick_checkup.md')
+            with patch('dq.reports.checkup.list_fields', return_value=[field]), \
+                    patch('dq.reports.checkup.collection_document_count',
+                          return_value=10), \
+                    patch('dq.reports.checkup.field_document_count',
+                          return_value=10):
+                write_report('http://solr/c', path, mode='lite')
+            with open(path) as stream:
+                report = stream.read()
+        self.assertIn('email_composite (selected; also matched '
+                      'us_phone_composite (phone))', report)
 
     def test_standard_text_composite_requires_text_schema(self):
         for type_class in ('TextField', 'StrField', 'SortableTextField'):

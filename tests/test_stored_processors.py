@@ -12,7 +12,7 @@ from dq.main import main
 from dq.errors import ReportError
 from dq.rules.regex.definitions import read_definition, definitions
 from dq.rules.regex.engine import handler
-from dq.rules._text.processor import reasons
+from dq.rules.code_points_base.processor import failure_reason
 from dq.reports.date_checker.processor import parse_date
 from dq.reports.date_checker.report import write_report
 from dq import stored
@@ -23,6 +23,9 @@ class ProcessorTests(unittest.TestCase):
         path = os.path.join(directory, 'custom.ini')
         parser = configparser.ConfigParser(interpolation=None)
         parser.read_string(contents)
+        if not parser.has_section('rule'):
+            parser.add_section('rule')
+            parser.set('rule', 'description', 'test regex rule')
         for section in parser.sections():
             if parser.has_option(section, 'regex_file'):
                 filename = section.replace(':', '_') + '.regex'
@@ -42,7 +45,8 @@ class ProcessorTests(unittest.TestCase):
                 stream.write(pattern)
             config_path = os.path.join(directory, 'rule.ini')
             with open(config_path, 'w') as stream:
-                stream.write('[rule]\nreport = no_match\n'
+                stream.write('[rule]\ndescription = literal regex test\n'
+                             '[base_rule]\nreport = no_match\n'
                              '[regex:regex01]\nregex_file = patterns/literal.regex\n'
                              'case_sensitive = false\nregex_format = compact\n')
             definition = read_definition(config_path)
@@ -64,7 +68,8 @@ class ProcessorTests(unittest.TestCase):
                     stream.write(pattern)
             path = os.path.join(directory, 'alternatives.ini')
             with open(path, 'w') as stream:
-                stream.write('[rule]\nreport = no_match\n'
+                stream.write('[rule]\ndescription = alternative regex test\n'
+                             '[base_rule]\nreport = no_match\n'
                              '[regex:regex01]\nregex_file = letters.regex\nregex_format = compact\n'
                              '[regex:regex02]\nregex_file = digits.regex\nregex_format = compact\n')
             definition = read_definition(path)
@@ -82,7 +87,7 @@ class ProcessorTests(unittest.TestCase):
 
     def test_regex_modes_flags_and_reasons(self):
         with tempfile.TemporaryDirectory() as directory:
-            definition = self.definition(directory, '''[rule]
+            definition = self.definition(directory, '''[base_rule]
 report = no_match
 [regex:regex01]
 regex_file = abc [0-9]+
@@ -122,21 +127,21 @@ case_sensitive = false
     def test_invalid_regex_definitions(self):
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaises(ReportError):
-                self.definition(directory, '[rule]\nname = custom\nreport = no_match\n'
+                self.definition(directory, '[base_rule]\nname = custom\nreport = no_match\n'
                                 '[regex:regex01]\nregex_file = a')
             with self.assertRaises(ReportError):
-                self.definition(directory, '[rule]\n'
+                self.definition(directory, '[base_rule]\n'
                                 '[regex:regex01]\nregex_file = a')
             for rule in ['regex_file = [', 'regex_file = a\ncase_sensitive = maybe',
                          'regex_file = a\nregex_format = wide',
                          'regex_file = a\nmatch_mode = search']:
                 with self.assertRaises(ReportError):
-                    self.definition(directory, '[rule]\nreport = no_match\n'
+                    self.definition(directory, '[base_rule]\nreport = no_match\n'
                                     '[regex:regex01]\n' + rule)
 
     def test_case_sensitive_multiline_and_literal_hash(self):
         with tempfile.TemporaryDirectory() as directory:
-            definition = self.definition(directory, '''[rule]
+            definition = self.definition(directory, '''[base_rule]
 report = no_match
 [regex:regex01]
 regex_file = ^Abc[ ]\\#\ncase_sensitive = true
@@ -148,12 +153,13 @@ match_mode = partial
             self.assertIsNone(expression.search('first\nabc #'))
 
     def test_unicode_indicators(self):
-        self.assertEqual(reasons('café 日本語\n\t'), [])
-        self.assertEqual(reasons('\ufffd\ufffd\x00'), [])
-        result = reasons('\ufffd\u200b\ue000')
-        self.assertIn('3 suspicious code-point buckets', result[0])
-        self.assertEqual(len(result), 4)
-        self.assertEqual(reasons('\u200b'), [])
+        self.assertIsNone(failure_reason('Aa'))
+        self.assertIsNone(failure_reason('Aé'))
+        self.assertIn('3 code-point buckets', failure_reason('AéĀ'))
+        self.assertIn('3 code-point buckets', failure_reason('AΩЖ'))
+        self.assertIsNone(failure_reason('\ufffd\ufffd\x00'))
+        self.assertIn('3 code-point buckets', failure_reason('\ufffd\u200b\ue000'))
+        self.assertIsNone(failure_reason('\u200b'))
 
     def test_dates_and_histogram(self):
         self.assertEqual(parse_date('2024-01-01T01:00:00+01:00').isoformat(), '2024-01-01T00:00:00')
@@ -178,7 +184,7 @@ match_mode = partial
         with tempfile.TemporaryDirectory() as directory:
             custom_rules = os.path.join(directory, 'custom_rules')
             os.mkdir(custom_rules)
-            self.definition(custom_rules, '[rule]\nreport = no_match\n'
+            self.definition(custom_rules, '[base_rule]\nreport = no_match\n'
                             '[regex:regex01]\nregex_file = valid')
             path = os.path.join(directory, 'dq.ini')
             write_config(path, 'http://solr/c', None)
@@ -189,7 +195,7 @@ match_mode = partial
 
     def test_invalid_matches_are_labeled_as_offending(self):
         with tempfile.TemporaryDirectory() as directory:
-            definition = self.definition(directory, '[rule]\nreport=match\n'
+            definition = self.definition(directory, '[base_rule]\nreport=match\n'
                                          '[regex:regex01]\nregex_file=valid')
             path = os.path.join(directory, 'dq.ini')
             write_config(path, 'http://solr/c', None, reports_dir=directory)

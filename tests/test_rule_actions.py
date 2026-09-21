@@ -171,7 +171,7 @@ class SpecialReportTests(unittest.TestCase):
             self.assertEqual(commands[0], 'bin/dq --report full_checkup')
             self.assertEqual(commands[1], 'bin/dq --report full_checkup --rows 1000')
             self.assertEqual(len(commands[2:]), 1)
-            self.assertIn('### Analyze Specific Fields', report)
+            self.assertIn('### Analyze Specific Fields with Specific Rules', report)
             self.assertNotIn('--action', commands[2])
             self.assertLess(report.index('## Options Used'), report.index('Configuration:'))
             self.assertLess(report.index('Configuration:'), report.index('| Option'))

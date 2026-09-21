@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Generate repeatable synthetic fixtures with independently selected errors per field."""
 import argparse
+import importlib
 import json
 import os
+import pkgutil
 import random
+import re
 import sys
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -13,37 +16,95 @@ if SOURCE_ROOT not in sys.path:
 
 from dq.rules.synthetic_values import (MISSING, common_invalid_value,
                                        defect_plan, standard_text_defect_plan)
-from dq.rules.code_points_base.synthetic_values import invalid_values as invalid_text
-from dq.rules.email_base.synthetic_values import invalid_values as invalid_email
-from dq.rules.us_phone_base.synthetic_values import invalid_values as invalid_phone
-from dq.rules.ssn_base.synthetic_values import invalid_values as invalid_ssn
-from dq.rules.part_number_example_base.synthetic_values import invalid_values as invalid_part_number
-
-FIELDS = ['first_name_t', 'last_name_t', 'street_address_t', 'city_t', 'state_t',
-          'postal_code_t', 'country_t', 'email_t', 'phone_t', 'ssn_t',
-          'part_number_s', 'event_date_dt', 'notes_t']
-FORMAT_FIELDS = set(('email_t', 'phone_t', 'ssn_t', 'part_number_s'))
+import dq.rules
+from dq.rules.code_points_base import optional_demo_values as code_point_values
 
 
-def valid_values(index):
-    return dict(zip(FIELDS, ['DemoName{0}'.format(index), 'ExampleFamily',
-        '{0} Example Street'.format(index), 'Example City', 'CA', '90001', 'US',
-        'demo{0}@example.com'.format(index), '212-555-{0:04d}'.format(100 + index % 100),
-        '123-45-{0:04d}'.format(1000 + index % 9000),
-        'PRT-{0:06d}'.format(index % 1000000),
-        '2024-01-15T00:00:00Z', 'Synthetic example text']))
+def suggested_field_name(module):
+    """Read and validate an optional demo module's MVP text-field suggestion."""
+    name = module.suggested_field_name()
+    if not isinstance(name, str) or not re.match(r'^[A-Za-z_][A-Za-z0-9_]*_(t|s)$', name):
+        raise ValueError('suggested demo field name must end in _t or _s: {0}'.format(name))
+    return name
 
 
-def malformed_value(field, index, sequence):
-    valid = valid_values(index + 1)[field]
-    generator = {
-        'email_t': invalid_email,
-        'phone_t': invalid_phone,
-        'ssn_t': invalid_ssn,
-        'part_number_s': invalid_part_number,
-    }.get(field, invalid_text)
-    values = generator(valid, index + 1)
-    return values[(index + sequence) % len(values)]
+def discover_demo_value_modules():
+    """Discover optional demo capabilities in stable rule-package order."""
+    result = []
+    packages = sorted(pkgutil.iter_modules(dq.rules.__path__), key=lambda item: item[1])
+    for unused, package_name, is_package in packages:
+        if not is_package or not package_name.endswith('_base'):
+            continue
+        module_name = 'dq.rules.{0}.optional_demo_values'.format(package_name)
+        if pkgutil.find_loader(module_name) is None:
+            continue
+        module = importlib.import_module(module_name)
+        if not hasattr(module, 'suggested_field_name'):
+            continue
+        for function_name in ('generate_valid_value', 'generate_invalid_value'):
+            if not callable(getattr(module, function_name, None)):
+                raise ValueError('{0} must define {1}()'.format(module_name, function_name))
+        result.append((suggested_field_name(module), module))
+    names = [name for name, module in result]
+    if len(names) != len(set(names)):
+        raise ValueError('optional demo modules suggest duplicate field names')
+    return result
+
+
+DEMO_VALUE_MODULES = discover_demo_value_modules()
+DEMO_VALUE_MODULE_BY_FIELD = dict(DEMO_VALUE_MODULES)
+BASE_FIELDS = ['first_name_t', 'last_name_t', 'street_address_t', 'city_t',
+               'state_t', 'postal_code_t', 'country_t']
+FIELDS = BASE_FIELDS + [name for name, module in DEMO_VALUE_MODULES] + [
+    'event_date_dt', 'notes_t']
+FORMAT_FIELDS = set(DEMO_VALUE_MODULE_BY_FIELD)
+
+
+def valid_values(index, rng):
+    """Build the correct field values for one generated demo document.
+
+    ``index`` is the document's one-based sequence number.  Fields governed by
+    a format rule delegate their correct values to that rule's
+    ``optional_demo_values.py`` module, keeping correct and incorrect examples
+    together.  Other general demo fields are created directly below.
+    """
+    values = {
+        'first_name_t': 'DemoName{0}'.format(index),
+        'last_name_t': 'ExampleFamily',
+        'street_address_t': '{0} Example Street'.format(index),
+        'city_t': 'Example City',
+        'state_t': 'CA',
+        'postal_code_t': '90001',
+        'country_t': 'US',
+        'event_date_dt': '2024-01-15T00:00:00Z',
+        'notes_t': 'Synthetic example text',
+    }
+    for field, module in DEMO_VALUE_MODULES:
+        values[field] = module.generate_valid_value(index, rng)
+    return values
+
+
+def synthetic_value_module(field):
+    """Return the rule module that generates values for a demo field."""
+    return DEMO_VALUE_MODULE_BY_FIELD.get(field, code_point_values)
+
+
+def malformed_value(field, index, rng):
+    """Replace a correct stored value with a rule-specific invalid example.
+
+    ``index`` is the zero-based position in the ``documents`` list, so adding
+    one recovers the one-based number used in IDs such as ``demo-000007``.  The
+    ``rng`` is the single random-number generator created from the run's seed,
+    so rule-specific choices remain reproducible. A format rule implements
+    ``generate_invalid_value(index, rng)``. Internal support for a transformer
+    such as code points uses a private hook that receives the valid value.
+    """
+    module = synthetic_value_module(field)
+    valid = valid_values(index + 1, rng)[field]
+    corrupt = getattr(module, '_corrupt_valid_value', None)
+    if corrupt is not None:
+        return corrupt(valid, index + 1, rng)
+    return module.generate_invalid_value(index + 1, rng)
 
 
 def invalid_date(index, sequence):
@@ -61,7 +122,8 @@ def generate(count, incorrect_percent=20.0, seed=None):
     if seed is None:
         seed = random.SystemRandom().getrandbits(128)
     rng = random.Random(seed)
-    documents = [dict(valid_values(i), id='demo-{0:06d}'.format(i)) for i in range(1, count + 1)]
+    documents = [dict(valid_values(i, rng), id='demo-{0:06d}'.format(i))
+                 for i in range(1, count + 1)]
     for field in FIELDS:
         number = int(count * percentages[field] / 100.0 + 0.5)
         chosen = rng.sample(range(count), number)
@@ -85,7 +147,7 @@ def generate(count, incorrect_percent=20.0, seed=None):
             else:
                 kind = planned_defect
                 if kind == 'rule':
-                    doc[field] = malformed_value(field, index, sequence)
+                    doc[field] = malformed_value(field, index, rng)
                 else:
                     value = common_invalid_value(kind, doc[field])
                     if value is MISSING:

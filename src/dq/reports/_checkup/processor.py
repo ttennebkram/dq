@@ -4,16 +4,31 @@ from collections import Counter, OrderedDict
 from dq import stored
 from dq.findings import Finding
 from dq.field_selection import is_text_field, is_date_field
-from dq.rules._text.processor import value_reasons, blank_reason
+from dq.rules.text.processor import value_reasons, blank_reason
 from dq.rules.regex.definitions import definitions
-from dq.rules.composites import expand
+from dq.rules.composites import COMPOSITES, expand
 from dq.rules.chain import _failure
 
-BASE_CHECKS = ('missing_fields_base', 'empty_strings_base', 'whitespace_only_base',
-               'surrounding_whitespace_base', 'code_points_base',
-               'email_base', 'us_phone_base', 'ssn_base')
-CHECKS = BASE_CHECKS + ('standard_text_composite', 'email_composite',
-                        'us_phone_composite', 'ssn_composite')
+def _known_base_checks():
+    """Return every base rule referenced by the loaded composites, in order."""
+    result = []
+
+    def visit(name):
+        if name in COMPOSITES:
+            for child in COMPOSITES[name]['rules']:
+                visit(child)
+        elif name not in result:
+            result.append(name)
+
+    for composite_name in COMPOSITES:
+        visit(composite_name)
+    return tuple(result)
+
+
+BASE_CHECKS = _known_base_checks()
+COMPOSITE_CHECKS = tuple(COMPOSITES)
+CHECKS = BASE_CHECKS + COMPOSITE_CHECKS
+_AUTOMATIC_RULES = None
 
 
 class ScanResults(dict):
@@ -21,17 +36,37 @@ class ScanResults(dict):
     documents_checked = 0
 
 
+class RulePlan(OrderedDict):
+    """Selected rules plus the automatic candidates considered for a field."""
+    automatic_matches = ()
+    automatic_selected = None
+
+
 def expanded_checks(checks):
-    composite_checks = ('standard_text_composite', 'email_composite',
-                        'us_phone_composite', 'ssn_composite')
-    execution_order = ([name for name in composite_checks if name in checks] +
-                       [name for name in BASE_CHECKS if name in checks])
-    return expand(execution_order, BASE_CHECKS)
+    base_checks = tuple(list(BASE_CHECKS) + [
+        name for name in checks if name not in COMPOSITES and name not in BASE_CHECKS])
+    execution_order = ([name for name in COMPOSITE_CHECKS if name in checks] +
+                       [name for name in base_checks if name in checks])
+    return expand(execution_order, base_checks)
 
 
 def ordered_checks(checks):
     """One execution/display order: common prerequisites before special checks."""
-    return [name for name in CHECKS if name in checks]
+    return ([name for name in CHECKS if name in checks] +
+            sorted(name for name in checks if name not in CHECKS))
+
+
+def _automatic_rules():
+    """Return common metadata for every current base and composite rule."""
+    global _AUTOMATIC_RULES
+    if _AUTOMATIC_RULES is not None:
+        return _AUTOMATIC_RULES
+    from dq.registry import discover_rules
+    result = discover_rules()
+    result.update(definitions())
+    result.update(COMPOSITES)
+    _AUTOMATIC_RULES = result
+    return _AUTOMATIC_RULES
 
 
 def plan(field):
@@ -40,33 +75,50 @@ def plan(field):
     # Split punctuation, underscores, and camelCase without matching substrings.
     words = set(re.findall('[a-z0-9]+', re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', name).lower()))
     selected = {'missing_fields_base': 'all selected stored fields'}
+    automatic_matches = ()
+    automatic_selected = None
     if text_field and not field.get('uniqueKey'):
-        selected['standard_text_composite'] = 'schema text/string field'
-    if text_field:
-        for check, tokens in [('email_composite', {'email', 'mail'}),
-                              ('us_phone_composite', {'phone', 'mobile', 'telephone', 'tel'}),
-                              ('ssn_composite', {'ssn'})]:
-            if words & tokens:
-                selected[check] = 'inferred from field-name component: ' + ', '.join(sorted(words & tokens))
-        if {'social', 'security'}.issubset(words):
-            selected['ssn_composite'] = 'inferred from social/security field-name components'
-    specialized = set(selected) & {'email_composite', 'us_phone_composite', 'ssn_composite'}
-    if specialized:
-        selected.pop('standard_text_composite', None)
-    if not text_field:
-        if not specialized:
-            selected.pop('standard_text_composite', None)
-        selected.pop('code_points_base', None)
+        matching = []
+        fallbacks = []
+        for check, definition in _automatic_rules().items():
+            types = definition['automatic_field_types']
+            if 'text' not in types:
+                continue
+            patterns = definition['automatic_field_name_patterns']
+            if not patterns:
+                fallbacks.append(check)
+                continue
+            matched = [pattern for pattern in patterns if set(pattern).issubset(words)]
+            if matched:
+                rendered = ' or '.join(' + '.join(pattern) for pattern in matched)
+                matching.append((check, rendered,
+                                 'inferred from field-name pattern: ' + rendered))
+        if matching:
+            matching.sort(key=lambda item: item[0])
+            automatic_matches = tuple((check, rendered)
+                                      for check, rendered, reason in matching)
+            automatic_selected = matching[0][0]
+            selected[automatic_selected] = matching[0][2]
+        if not matching:
+            for check in fallbacks:
+                selected[check] = 'schema text/string field'
     if is_date_field(field):
         # Date analysis is deferred beyond the MVP, including explicit overrides.
         selected = ({'missing_fields_base': 'native date field: presence only in the MVP'}
                     if 'missing_fields_base' in selected else {})
+        automatic_matches = ()
+        automatic_selected = None
     if str(field.get('typeClass', '')).endswith('DenseVectorField'):
         # Vector arrays are only eligible for presence checks, even when a name
         # or explicit override would otherwise select a value rule.
         selected = ({'missing_fields_base': 'vector field: presence only; stored array not fetched'}
                     if 'missing_fields_base' in selected else {})
-    return OrderedDict((name, selected[name]) for name in ordered_checks(selected))
+        automatic_matches = ()
+        automatic_selected = None
+    result = RulePlan((check, selected[check]) for check in ordered_checks(selected))
+    result.automatic_matches = automatic_matches
+    result.automatic_selected = automatic_selected
+    return result
 
 
 def scan(target, fields, plans, connection=None, progress=None, total=None, row_limit=-1, scan_progress=None, skip_null_values=False, on_finding=None):

@@ -12,7 +12,7 @@ from dq.main import main
 from dq.progress import ScanProgress
 from dq.stats import FILENAME, save_scan_stats, note_rate
 from dq.rules.regex.engine import findings
-from dq.rules.code_points_base.processor import findings as unicode_findings
+from dq.rules.code_points_base.processor import failure_reason
 from dq.solr import SolrError
 
 
@@ -34,10 +34,7 @@ class FirstFailureTests(unittest.TestCase):
 
     def test_code_points_base_reports_one_failure_per_value(self):
         value = '\ufffd\u200b\ue000'
-        with patch('dq.stored.values', return_value=iter([('one', 'f', value)])):
-            rows = list(unicode_findings('url', [{'name': 'f'}]))
-        self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0][2], value)
+        self.assertIn('3 code-point buckets', failure_reason(value))
 
 
 class StatsTests(unittest.TestCase):

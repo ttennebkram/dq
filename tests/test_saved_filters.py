@@ -70,7 +70,7 @@ class SavedFilterTests(unittest.TestCase):
                 main(['--config', path, '--write_config', '--include_field', 'name_s'])
             self.assertEqual(load_config(path).include_fields, ['name_s'])
             fields = [{'name': 'name_s', 'stored': True}, {'name': 'other_s', 'stored': True}]
-            with patch('dq.rules.missing_fields_base.processor.list_fields', return_value=fields), \
+            with patch('dq.rules.chain.stored.fields', return_value=fields), \
                  patch('dq.stored.values', return_value=iter([('one', 'name_s', False)])) as pages, \
                  patch('sys.stdout', io.StringIO()) as stdout, patch('sys.stderr', io.StringIO()):
                 main(['--config', path, '--rule', 'missing_fields_base', '--action', 'csv', '--rows', '1', '--reports_dir', directory])

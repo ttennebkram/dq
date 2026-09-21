@@ -1,95 +1,16 @@
 {
-  "add-field": [
+  "required_dynamic_fields": [
     {
-      "name": "first_name_t",
-      "type": "text_general",
-      "stored": true,
-      "indexed": true,
-      "multiValued": false
+      "name": "*_t",
+      "type": "text_general"
     },
     {
-      "name": "last_name_t",
-      "type": "text_general",
-      "stored": true,
-      "indexed": true,
-      "multiValued": false
+      "name": "*_s",
+      "type": "string"
     },
     {
-      "name": "street_address_t",
-      "type": "text_general",
-      "stored": true,
-      "indexed": true,
-      "multiValued": false
-    },
-    {
-      "name": "city_t",
-      "type": "text_general",
-      "stored": true,
-      "indexed": true,
-      "multiValued": false
-    },
-    {
-      "name": "state_t",
-      "type": "text_general",
-      "stored": true,
-      "indexed": true,
-      "multiValued": false
-    },
-    {
-      "name": "postal_code_t",
-      "type": "text_general",
-      "stored": true,
-      "indexed": true,
-      "multiValued": false
-    },
-    {
-      "name": "country_t",
-      "type": "text_general",
-      "stored": true,
-      "indexed": true,
-      "multiValued": false
-    },
-    {
-      "name": "email_t",
-      "type": "text_general",
-      "stored": true,
-      "indexed": true,
-      "multiValued": false
-    },
-    {
-      "name": "phone_t",
-      "type": "text_general",
-      "stored": true,
-      "indexed": true,
-      "multiValued": false
-    },
-    {
-      "name": "ssn_t",
-      "type": "text_general",
-      "stored": true,
-      "indexed": true,
-      "multiValued": false
-    },
-    {
-      "name": "part_number_s",
-      "type": "string",
-      "stored": true,
-      "indexed": true,
-      "multiValued": false
-    },
-    {
-      "name": "event_date_dt",
-      "type": "pdate",
-      "stored": true,
-      "indexed": true,
-      "multiValued": false
-    },
-    {
-      "name": "notes_t",
-      "type": "text_general",
-      "stored": true,
-      "indexed": true,
-      "multiValued": false
+      "name": "*_dt",
+      "type": "pdate"
     }
   ]
 }

@@ -103,7 +103,7 @@ class FieldOutputTests(unittest.TestCase):
         fields = [{'name': 'a', 'stored': True}, {'name': 'b', 'stored': True}]
         with tempfile.TemporaryDirectory() as root, patch('os.getcwd', return_value=root), \
                 patch('dq.actions.load_config', return_value=DqConfig(main_url='http://solr/c')), \
-                patch('dq.rules.missing_fields_base.processor.list_fields', return_value=fields), \
+                patch('dq.rules.chain.stored.fields', return_value=fields), \
                 patch('dq.stored.values', return_value=iter([('1', 'a', False), ('1', 'b', False), ('2', 'a', True)])) as scan, \
                 patch('sys.stdout', io.StringIO()), patch('sys.stderr', io.StringIO()):
             self.assertEqual(main(['--rule', 'missing_fields_base', '--action', 'csv', '--skip_null_values', '--rows', '2']), 0)

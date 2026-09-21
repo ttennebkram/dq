@@ -1,1 +1,1 @@
-"""Declarative regex rule package for part_number_example_base."""
+"""Check part numbers with regex: three letters, a dash, and six digits."""

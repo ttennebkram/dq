@@ -19,6 +19,18 @@ import data_generator_common
 
 
 class EsLoaderTests(unittest.TestCase):
+    def test_schema_uses_suffix_based_dynamic_templates(self):
+        path = os.path.join(os.path.dirname(__file__), '..',
+                            'generate_test_collection', 'schema_es.json')
+        with open(path, encoding='utf-8') as stream:
+            mappings = json.load(stream)['mappings']
+        templates = mappings['dynamic_templates']
+        by_match = dict((item[next(iter(item))]['match'],
+                         item[next(iter(item))]['mapping']['type'])
+                        for item in templates)
+        self.assertEqual(by_match, {'*_t': 'text', '*_s': 'keyword', '*_dt': 'date'})
+        self.assertIs(mappings['dynamic'], True)
+
     def test_no_arguments_hide_hyphenated_aliases(self):
         with patch('sys.stdout', io.StringIO()) as output:
             self.assertEqual(submit_to_es.main([]), 0)

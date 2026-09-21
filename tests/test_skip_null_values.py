@@ -12,7 +12,7 @@ from dq.registry import load_handler
 from dq.rules.regex.definitions import definitions
 from dq.rules.regex.engine import findings
 from dq.reports._checkup.processor import scan
-from dq.rules._text.processor import value_reasons
+from dq.rules.text.processor import value_reasons
 
 
 FIELDS = [{'name': 'email_t', 'type': 'string', 'stored': True}]
@@ -37,6 +37,14 @@ class NullFilterTests(unittest.TestCase):
                 self.assertEqual(fetch.call_count, 1)
             self.assertEqual(outputs[1], [row for row in outputs[0] if row[0] != '0'])
             self.assertTrue(set(('1', '2', '3', '4')).issubset(row[0] for row in outputs[1]))
+
+    def test_direct_base_rule_reports_null_without_calling_rule_logic(self):
+        for name in ('email_base', 'code_points_base'):
+            with patch('dq.stored.fields', return_value=FIELDS), \
+                    patch('dq.stored.values', return_value=iter([('null', 'email_t', None)])):
+                _, pages = load_handler(name, 'csv')('url')
+                rows = [row for page in pages for row in page]
+            self.assertEqual(rows, [('null', name + ': null value', '')])
 
     def test_regex_success_never_includes_null_or_blank(self):
         definition = dict(definitions()['email_base'], report='match')

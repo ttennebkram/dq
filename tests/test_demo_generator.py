@@ -5,14 +5,20 @@ import json
 import os
 import io
 import re
+import random
 import tempfile
 from unittest.mock import Mock, patch
 import unittest
 from dq.rules.regex.definitions import definitions
-from dq.rules.code_points_base.processor import reasons as code_point_reasons
+from dq.rules.code_points_base.processor import failure_reason as code_point_failure_reason
 
 path = os.path.join(os.path.dirname(__file__), '..', 'generate_test_collection', 'data_generator_common.py')
 demo = SimpleNamespace(**runpy.run_path(path))
+
+
+def valid_values(index):
+    """Read deterministic valid values through the shared seeded API."""
+    return demo.valid_values(index, random.Random(0))
 
 
 class DemoGeneratorTests(unittest.TestCase):
@@ -21,14 +27,14 @@ class DemoGeneratorTests(unittest.TestCase):
         self.assertEqual((docs, seed), demo.generate(100, seed=42))
         for field in demo.FIELDS:
             errors = [doc for index, doc in enumerate(docs, 1)
-                      if doc.get(field) != demo.valid_values(index)[field]]
+                      if doc.get(field) != valid_values(index)[field]]
             self.assertEqual(len(errors), 20)
 
     def test_global_percentage_rounding_and_limits(self):
         docs, _ = demo.generate(10, 25, seed=42)
         for field in demo.FIELDS:
             errors = [doc for index, doc in enumerate(docs, 1)
-                      if doc.get(field) != demo.valid_values(index)[field]]
+                      if doc.get(field) != valid_values(index)[field]]
             self.assertEqual(len(errors), 3)
         for kwargs in ({'count':0}, {'incorrect_percent':101}, {'incorrect_percent':float('nan')}):
             with self.assertRaises(ValueError):
@@ -36,36 +42,48 @@ class DemoGeneratorTests(unittest.TestCase):
 
     def test_part_numbers_include_valid_and_varied_invalid_values(self):
         pattern = re.compile(r'^[A-Za-z]{3}-[0-9]{6}$')
-        self.assertTrue(pattern.match(demo.valid_values(7)['part_number_s']))
+        self.assertTrue(pattern.match(valid_values(7)['part_number_s']))
         docs, _ = demo.generate(100, incorrect_percent=20, seed=42)
         values = [doc['part_number_s'] for index, doc in enumerate(docs, 1)
                   if isinstance(doc.get('part_number_s'), str)
                   and doc['part_number_s']
                   and doc['part_number_s'].strip()
-                  and doc['part_number_s'] != demo.valid_values(index)['part_number_s']]
+                  and doc['part_number_s'] != valid_values(index)['part_number_s']]
         self.assertGreater(len(set(values)), 1)
         self.assertTrue(all(pattern.match(value) is None for value in values))
+
+    def test_each_rule_uses_the_shared_seeded_random_generator(self):
+        for field in ('email_t', 'phone_t', 'ssn_t', 'part_number_s', 'notes_t'):
+            first_rng = random.Random(42)
+            second_rng = random.Random(42)
+            first = [demo.malformed_value(field, 7, first_rng) for unused in range(24)]
+            second = [demo.malformed_value(field, 7, second_rng) for unused in range(24)]
+            self.assertEqual(first, second)
+            self.assertGreater(len(set(first)), 1)
 
     def test_contact_fields_have_varied_values_that_fail_their_regexes(self):
         presets = definitions()
         for field, rule in [('email_t', 'email_base'), ('phone_t', 'us_phone_base'),
                             ('ssn_t', 'ssn_base')]:
             pattern = presets[rule]['rules'][0][2]
-            values = set(demo.malformed_value(field, index, index)
+            rng = random.Random(42)
+            values = set(demo.malformed_value(field, index, rng)
                          for index in range(24))
             self.assertGreaterEqual(len(values), 6)
             self.assertTrue(all(pattern.fullmatch(value) is None for value in values))
+        rng = random.Random(42)
         self.assertNotIn('not-an-email', set(
-            demo.malformed_value('email_t', index, index) for index in range(24)))
+            demo.malformed_value('email_t', index, rng) for index in range(24)))
 
     def test_other_text_fields_have_varied_detectable_unicode_defects(self):
         specialized = {'email_t', 'phone_t', 'ssn_t', 'part_number_s',
                        'event_date_dt'}
         for field in set(demo.FIELDS) - specialized:
-            values = set(demo.malformed_value(field, 7, sequence)
-                         for sequence in range(6))
+            rng = random.Random(42)
+            values = set(demo.malformed_value(field, 7, rng)
+                         for unused in range(24))
             self.assertEqual(len(values), 6)
-            self.assertTrue(all(code_point_reasons(value) for value in values))
+            self.assertTrue(all(code_point_failure_reason(value) for value in values))
 
     def test_future_dates_are_varied_valid_date_strings(self):
         values = set(demo.invalid_date(7, sequence)
@@ -97,7 +115,7 @@ class DemoGeneratorTests(unittest.TestCase):
     def test_standard_text_keeps_unicode_corruption_rare(self):
         docs, _ = demo.generate(1000, incorrect_percent=20, seed=42)
         values = [doc.get('first_name_t') for doc in docs]
-        self.assertEqual(sum(bool(code_point_reasons(value))
+        self.assertEqual(sum(bool(code_point_failure_reason(value))
                              for value in values if isinstance(value, str)), 1)
 
     def test_per_field_option_is_not_supported(self):

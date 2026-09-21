@@ -1,11 +1,14 @@
 """Discover rules and reports and lazily load their handlers."""
 import importlib
+import configparser
+import os
 import pkgutil
 import re
 import dq.reports
 import dq.rules
 from dq.errors import ReportError
 from dq.rules.composites import COMPOSITES, expand
+from dq.rules.metadata import read_metadata
 
 
 # Deferred names are recognized for clear errors but stay out of catalogs.
@@ -22,28 +25,33 @@ def _packages(package):
 def discover_rules():
     """Inspect rule packages under dq.rules, never working-directory scripts."""
     entries = {}
-    for _, name, is_package in _packages(dq.rules):
+    for finder, name, is_package in _packages(dq.rules):
         if not is_package or name.startswith('_'):
             continue
-        module = importlib.import_module('dq.rules.' + name)
-        registered_name = getattr(module, 'NAME', None)
-        if registered_name is None:
-            continue
-        if registered_name != name or not re.match(r'^[a-z][a-z0-9_]*$', name):
+        if not re.match(r'^[a-z][a-z0-9_]*$', name):
             raise ReportError('invalid internal rule package: {0}'.format(name))
-        rule_type = getattr(module, 'RULE_TYPE', None)
-        csv = getattr(module, 'CSV', None)
-        if rule_type == 'base':
-            if not name.endswith('_base') or not csv:
-                raise ReportError('{0} base rule must use an _base package and declare CSV'.format(name))
-        elif rule_type == 'composite':
-            if not name.endswith('_composite') or name not in COMPOSITES:
-                raise ReportError('{0} composite rule must use an _composite package'.format(name))
-        else:
-            raise ReportError('{0} rule must declare RULE_TYPE as base or composite'.format(name))
-        entries[name] = {'description': module.DESCRIPTION,
-                         'csv': csv,
-                         'rule_type': rule_type}
+        if name.endswith('_composite'):
+            if name not in COMPOSITES:
+                raise ReportError('{0} composite rule must contain valid rule.ini'.format(name))
+            continue
+        if not name.endswith('_base'):
+            continue
+        path = os.path.join(finder.path, name, 'rule.ini')
+        parser = configparser.ConfigParser(interpolation=None)
+        try:
+            with open(path, encoding='utf-8') as stream:
+                parser.read_file(stream)
+            if not parser.has_section('base_rule'):
+                raise ValueError('expected a [base_rule] section')
+            if parser.has_section('composite_rule'):
+                raise ValueError('_base directory cannot contain [composite_rule]')
+            metadata = read_metadata(parser)
+        except (OSError, configparser.Error, ValueError) as error:
+            raise ReportError('invalid base rule INI file {0}: {1}'.format(path, error)) from error
+        # INI-defined regex rules are cataloged by regex.definitions.
+        if any(section.startswith('regex:') for section in parser.sections()):
+            continue
+        entries[name] = dict(metadata, csv=True, rule_type='base')
     return entries
 
 
@@ -53,13 +61,13 @@ def discover_reports():
     for _, name, is_package in _packages(dq.reports):
         if not is_package or name.startswith('_'):
             continue
-        module = importlib.import_module('dq.reports.' + name)
-        registered_name = getattr(module, 'NAME', None)
-        if registered_name is None:
-            continue
-        if registered_name != name or not re.match(r'^[a-z][a-z0-9_]*$', name):
+        if not re.match(r'^[a-z][a-z0-9_]*$', name):
             raise ReportError('invalid internal report package: {0}'.format(name))
-        entries[name] = {'description': module.DESCRIPTION,
+        module = importlib.import_module('dq.reports.' + name)
+        description = getattr(module, 'DESCRIPTION', None)
+        if description is None:
+            continue
+        entries[name] = {'description': description,
                          'report': getattr(module, 'REPORT', None)}
     return entries
 
@@ -140,32 +148,18 @@ def load_handler(name, action):
             raise ReportError('{0} is deferred beyond the MVP'.format(name))
         prefix = 'dq.reports.' + name + '.'
     else:
-        if isinstance(name, str) and name in COMPOSITES:
-            return load_handler([name], action)
-        if isinstance(name, (list, tuple)):
-            names = list(name)
-            if not names:
-                raise ReportError('at least one rule is required for the CSV action')
-            if len(names) == 1 and names[0] not in COMPOSITES:
-                return load_handler(names[0], action)
-            known_base = set(rule_name for rule_name, entry in rule_entries.items()
-                             if entry['csv']) | set(regexes)
-            for rule_name in names:
-                if rule_name not in known_base and rule_name not in COMPOSITES:
-                    if rule_name in report_entries:
-                        raise ReportError('{0} is a special report and does not support CSV; use --report {0}'.format(rule_name))
-                    raise ReportError('unknown rule: {0}'.format(rule_name))
-            from dq.rules.chain import handler
-            return handler(expand(names, known_base), regexes)
-        if name in regexes:
-            from dq.rules.regex.engine import handler
-            return handler(regexes[name], action)
-        if name in report_entries:
-            raise ReportError('{0} is a special report and does not support CSV; use --report {0}'.format(name))
-        if name not in rule_entries or not rule_entries[name]['csv']:
-            raise ReportError('unknown rule: {0}'.format(name))
-        path = rule_entries[name]['csv']
-        prefix = 'dq.rules.' + name + '.'
+        names = list(name) if isinstance(name, (list, tuple)) else [name]
+        if not names:
+            raise ReportError('at least one rule is required for the CSV action')
+        known_base = set(rule_name for rule_name, entry in rule_entries.items()
+                         if entry['csv']) | set(regexes)
+        for rule_name in names:
+            if rule_name not in known_base and rule_name not in COMPOSITES:
+                if rule_name in report_entries:
+                    raise ReportError('{0} is a special report and does not support CSV; use --report {0}'.format(rule_name))
+                raise ReportError('unknown rule: {0}'.format(rule_name))
+        from dq.rules.chain import handler
+        return handler(expand(names, known_base), regexes)
 
     try:
         module_name, function_name = path.split(':')

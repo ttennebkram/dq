@@ -211,7 +211,7 @@ class ScanProgressTests(unittest.TestCase):
 
     def test_unlimited_missing_fields_base_uses_record_progress(self):
         from dq.progress import ScanProgress
-        from dq.rules.missing_fields_base.processor import prepare_csv
+        from dq.registry import load_handler
         out = FlushingStream()
         field = {'name': 'embedding', 'stored': True, 'typeClass': 'solr.DenseVectorField'}
         responses = [
@@ -222,9 +222,10 @@ class ScanProgressTests(unittest.TestCase):
             ]}, 'nextCursorMark': 'one'},
             {'response': {'docs': []}, 'nextCursorMark': 'one'},
         ]
-        with patch('dq.rules.missing_fields_base.processor.list_fields', return_value=[field]), \
+        with patch('dq.rules.chain.stored.fields', return_value=[field]), \
                 patch('dq.stored.get_json', side_effect=responses), \
                 patch('sys.stderr', io.StringIO()):
+            prepare_csv = load_handler('missing_fields_base', 'csv')
             header, pages = prepare_csv('url', scan_progress=ScanProgress('missing_fields_base', 1, out))
             self.assertEqual(sum(len(page) for page in pages), 2)
         self.assertIn('Field: embedding; rules: missing_fields_base', out.getvalue())

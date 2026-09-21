@@ -4,7 +4,7 @@ import re
 from dq import stored
 from dq.findings import Finding, CsvExport
 from dq.field_selection import is_date_field
-from dq.rules._text.processor import blank_reason
+from dq.rules.text.processor import blank_reason
 from dq.errors import ReportError
 
 

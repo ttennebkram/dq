@@ -1,48 +1,67 @@
 """Unicode indicators are findings for review, not proof of corruption."""
+import configparser
+import os
 import unicodedata
-from dq import stored
-from dq.findings import Finding, CsvExport
-from dq.field_selection import is_text_field
-from dq.errors import ReportError
+
+from .unicode_data import block_name as _block_name, script_name as _script_name
 
 
-def reasons(value):
-    found = []
-    buckets = set()
+def failure_reason(value):
+    """Return one CSV failure reason, or None when the value passes."""
+    examples = _bucket_examples(value)
+    if len(examples) < _SUSPICIOUS_BUCKETS_THRESHOLD:
+        return None
+    return '{0} code-point buckets: {1}'.format(
+        len(examples), ', '.join(sorted(examples)))
+
+
+def _unicode_pseudotype(char, category):
+    """Map General Category and special characters to a DQ pseudotype."""
+    if char == '\ufffd':
+        return 'replacement'
+    if category == 'Cs':
+        return 'surrogate'
+    if category == 'Co':
+        return 'private_use'
+    if category == 'Cn':
+        return 'unassigned'
+    if category == 'Cf':
+        return 'format'
+    if category == 'Cc' and char not in '\t\r\n':
+        return 'control'
+    return 'normal'
+
+
+def _bucket(char):
+    """Return the Script + Block + Unicode Pseudotype bucket."""
+    code_point = ord(char)
+    pseudotype = _unicode_pseudotype(char, unicodedata.category(char))
+    return ' / '.join((_script_name(code_point), _block_name(code_point), pseudotype))
+
+
+def _bucket_examples(value):
+    """Return one example character for each distinct Unicode bucket."""
+    examples = {}
     for char in value:
+        code_point = ord(char)
         category = unicodedata.category(char)
-        if char == '\ufffd' or category in ('Cs', 'Co', 'Cn', 'Cf') or (category == 'Cc' and char not in '\t\r\n'):
-            bucket = {
-                'Cs': 'surrogate', 'Co': 'private-use', 'Cn': 'unassigned',
-                'Cf': 'format', 'Cc': 'control',
-            }.get(category, 'replacement')
-            if char == '\ufffd':
-                bucket = 'replacement'
-            buckets.add(bucket)
-            found.append('U+{0:04X} {1} ({2})'.format(
-                ord(char), unicodedata.name(char, 'UNNAMED'), category))
-    if len(buckets) < 3:
-        return []
-    summary = '{0} suspicious code-point buckets: {1}'.format(
-        len(buckets), ', '.join(sorted(buckets)))
-    return [summary] + sorted(set(found))
+        name = _bucket(char)
+        examples.setdefault(name, 'U+{0:04X} {1} ({2})'.format(
+            code_point, unicodedata.name(char, 'UNNAMED'), category))
+    return examples
 
 
-def findings(target, selected, connection=None, row_limit=-1, scan_progress=None, skip_null_values=False):
-    for identifier, field, value in stored.values(target, selected, connection, row_limit=row_limit, scan_progress=scan_progress):
-        if isinstance(value, str):
-            for reason in reasons(value)[:1]:
-                yield Finding(field, (identifier, 'code_points_base: ' + field + ': ' + reason, value))
+def _read_threshold():
+    """Read and validate this rule's suspicious-bucket threshold."""
+    parser = configparser.ConfigParser(interpolation=None)
+    path = os.path.join(os.path.dirname(__file__), 'rule.ini')
+    with open(path, encoding='utf-8') as stream:
+        parser.read_file(stream)
+    value = parser.getint('base_rule', 'suspicious_buckets_threshold')
+    if value < 1:
+        raise ValueError(
+            'suspicious_buckets_threshold found in rule.ini, must be at least 1')
+    return value
 
 
-def fields(target, include=(), exclude=(), connection=None):
-    selected = [field for field in stored.fields(target, include, exclude, connection)
-                if is_text_field(field) and (include or not field.get('uniqueKey'))]
-    if not selected:
-        raise ReportError('code_points_base: no text/string fields selected')
-    return selected
-
-
-def prepare_csv(target, *, include=(), exclude=(), connection=None, row_limit=-1, scan_progress=None, skip_null_values=False):
-    selected = fields(target, include, exclude, connection)
-    return CsvExport(selected, ['id', 'reason', 'value'], stored.pages(findings(target, selected, connection, row_limit=row_limit, scan_progress=scan_progress)))
+_SUSPICIOUS_BUCKETS_THRESHOLD = _read_threshold()

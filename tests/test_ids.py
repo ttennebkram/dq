@@ -113,10 +113,14 @@ class CliTests(unittest.TestCase):
 
     def run_export(self, fields, pages):
         stdout, stderr = io.StringIO(), io.StringIO()
+        selected = [field for field in fields if field.get('stored') is True]
+        field_result = selected if selected else SolrError(
+            'no stored fields selected; adjust include/exclude field patterns')
         with tempfile.TemporaryDirectory() as directory:
             with patch("dq.actions.load_config", return_value=DqConfig(reports_dir=directory)), \
                  patch("dq.actions.collection_url", return_value="http://solr/c"), \
-                 patch("dq.rules.missing_fields_base.processor.list_fields", return_value=fields), \
+                 patch("dq.rules.chain.stored.fields", side_effect=(
+                     None if selected else field_result), return_value=selected), \
                  patch("dq.stored.values", return_value=iter((v, "title_s", False) for batch in pages for v in batch)) as fetch, \
                  redirect_stdout(stdout), redirect_stderr(stderr):
                 try:
