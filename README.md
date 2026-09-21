@@ -232,6 +232,16 @@ From the main DQ project directory, go to `generate_test_collection/`:
 cd generate_test_collection
 ```
 
+Creating `dq_demo` is generally a two-step process:
+
+1. Generate random synthetic sample data. The Solr generator writes
+   `documents_solr.json`; the shared Elasticsearch/OpenSearch generator writes
+   `documents_es.ndjson`.
+2. Submit the generated file to the search engine. Use `submit_to_solr.py` for
+   Solr or `submit_to_es.py` for Elasticsearch and OpenSearch.
+
+The examples below show both steps for each engine.
+
 ### Solr Example
 
 See also [ES Example](#es-example). The submission script creates the `dq_demo`
