@@ -85,6 +85,7 @@ class DemoLoaderTests(unittest.TestCase):
         self.assertIn('--submit', output.getvalue())
         self.assertIn('documents_solr.json', output.getvalue())
         self.assertIn('--recreate_collection', output.getvalue())
+        self.assertIn('--recreate_index', output.getvalue())
         self.assertNotIn('--recreate-collection', output.getvalue())
         self.assertNotIn('--preserve-empty-strings', output.getvalue())
         self.assertNotIn('--data-files-dir', output.getvalue())
@@ -125,7 +126,7 @@ class DemoLoaderTests(unittest.TestCase):
                         get_json=Mock(return_value=cluster)), \
                 patch('sys.stdout', io.StringIO()):
             self.assertEqual(loader['main']([
-                '--recreate_collection', '--data_files_dir', '/missing']), 0)
+                '--recreate_index', '--data_files_dir', '/missing']), 0)
         urls = [call[0][0].full_url for call in connection.open.call_args_list]
         self.assertFalse(any(url.endswith('/schema') for url in urls))
         self.assertTrue(any(url.endswith('/config') for url in urls))

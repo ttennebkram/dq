@@ -35,6 +35,7 @@ class EsLoaderTests(unittest.TestCase):
         with patch('sys.stdout', io.StringIO()) as output:
             self.assertEqual(submit_to_es.main([]), 0)
         self.assertIn('--recreate_index', output.getvalue())
+        self.assertIn('--recreate_collection', output.getvalue())
         self.assertIn('--data_files_dir', output.getvalue())
         self.assertIn('documents_es.ndjson', output.getvalue())
         self.assertNotIn('--recreate-index', output.getvalue())
@@ -67,7 +68,7 @@ class EsLoaderTests(unittest.TestCase):
                 patch('submit_to_es.request', side_effect=fake_request), \
                 patch('sys.stdout', io.StringIO()):
             self.assertEqual(submit_to_es.main([
-                '--recreate_index', '--data_files_dir', '/missing']), 0)
+                '--recreate_collection', '--data_files_dir', '/missing']), 0)
         self.assertEqual(calls, [('/', 'GET'), ('/dq_demo', 'GET'),
                                  ('/dq_demo', 'DELETE'), ('/dq_demo', 'PUT')])
 

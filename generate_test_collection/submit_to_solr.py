@@ -131,9 +131,12 @@ def main(argv=None):
     actions = parser.add_mutually_exclusive_group(required=True)
     actions.add_argument('--submit', action='store_true',
                          help='submit documents in documents_solr.json, creating the demo collection dq_demo if needed')
-    actions.add_argument('--recreate_collection', action='store_true',
+    actions.add_argument('--recreate_collection', '--recreate_index',
+                        dest='recreate_collection', action='store_true',
                         help='delete dq_demo and its configset, then rebuild an empty collection without submitting')
     actions.add_argument('--recreate-collection', dest='recreate_collection', action='store_true',
+                         help=argparse.SUPPRESS)
+    actions.add_argument('--recreate-index', dest='recreate_collection', action='store_true',
                          help=argparse.SUPPRESS)
     parser.add_argument('--preserve_empty_strings', action='store_true',
                         help='preserve empty strings for special tests; default: normal Solr blank removal')

@@ -121,5 +121,6 @@ reports_dir = reports
 #   --write_config / --write-config
 # Other command-line-only options:
 #   --config FILE
+#   Demo loaders: --recreate_collection and --recreate_index are synonyms.
 #   --help / -h
 #   --version

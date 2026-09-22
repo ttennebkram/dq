@@ -21,7 +21,7 @@ PowerShell or Command Prompt on Windows.
 - [Rules, Reports and Actions](#rules-reports-and-actions)
 - [Using the DQ Tool](#using-the-dq-tool)
 - [Windows Users](#windows-users)
-- [Using HTTPS](#using-https)
+- [Basic Auth and HTTPS](#basic-auth-and-https)
 - [Vocabulary](#vocabulary)
 - [FAQ](#faq)
 - [Development and Custom Rules](#development-and-custom-rules)
@@ -125,15 +125,8 @@ is used without a separate collection setting:
 bin/dq --config_wizard
 ```
 
-`--setup_wizard` is a synonym for `--config_wizard`.
-
 The welcome header shows the full path of the file it will create or update.
-The default is `dq.ini` in your current directory. To choose a different file,
-cancel with Ctrl-C and run:
-
-```sh
-bin/dq --config_wizard
-```
+The default is `dq.ini` in your current directory.
 
 The wizard asks for the URL, collection, and optional login, then asks for
 confirmation before saving.
@@ -164,9 +157,21 @@ exist unless you are writing it with `--write_config` or `--config_wizard`.
 Both configuration commands default to `dq.ini` in the current directory unless overrode
 by `--config FILE` as their destination. Changed old settings are retained as comments.
 
-See [dq.ini.template](dq.ini.template) for all supported settings,
-including credentials and certificate paths, and the
-[configuration reference](docs/configuration.md) for detailed examples.
+See [Basic Auth and HTTPS](#basic-auth-and-https) for authentication and secure connections.
+
+See `dq.ini.template` for all supported settings,
+including credentials and certificate paths. More configuration examples are in
+`docs/configuration.md`.
+
+### Test the Connection
+
+After saving your connection settings, confirm that DQ can reach the search engine:
+
+```sh
+bin/dq --list_collections
+```
+
+If the connection fails, see [Basic Auth and HTTPS](#basic-auth-and-https).
 
 ### Run DQ
 
@@ -201,7 +206,7 @@ to your PATH; see [Setting the DQ PATH](#setting-the-dq-path).
 
 ### Run a Quick Checkup
 
-After saving your connection settings, run:
+Run:
 
 ```sh
 bin/dq --report quick_checkup
@@ -314,7 +319,8 @@ generated records, run two commands:
 
 `--submit` is required whenever documents should be loaded and automatically
 creates the collection if it does not exist. The two options are mutually
-exclusive.
+exclusive. Both submission scripts accept `--recreate_collection` and
+`--recreate_index` as synonyms.
 
 To generate the same random data each time, which can simplify some tests, use
 `--seed SOME_NUMBER`.
@@ -385,6 +391,8 @@ records, run two commands:
 
 `--submit` is required whenever documents should be loaded and automatically
 creates the index if it does not exist. The two options are mutually exclusive.
+Both submission scripts accept `--recreate_index` and `--recreate_collection`
+as synonyms.
 
 ES and OpenSearch preserve empty strings in `_source` normally, so they do not
 need Solr's `--preserve_empty_strings` loader option.
@@ -398,7 +406,7 @@ equivalent dynamic templates from `schema_es.json`: `*_t` becomes `text`,
 `*_s` becomes `keyword`, and `*_dt` becomes `date`.
 The shared ES/OpenSearch loader accepts `--main_url`, `--data_files_dir`,
 `--config`, `--username`, `--password`, `--trust_certificate`, and either
-`--submit` or `--recreate_index`. The loader uses the normal DQ connection settings when
+`--submit`, `--recreate_index`, or its synonym `--recreate_collection`. The loader uses the normal DQ connection settings when
 `main_url` identifies Elasticsearch or OpenSearch; CLI options override them.
 If `dq.ini` points to Solr, the ES loader reports the mismatch instead of using
 that target or its credentials. Use separate INI files when servers need
@@ -501,7 +509,7 @@ bin/dq --rule missing_fields_base --include_field email_t
 
 This writes `reports/email_t_missing_fields_base.csv` automatically. Replace `email_t` with
 your field name when using your own data. Field listing writes to standard output.
-See [Using HTTPS](#using-https) for certificates and authentication.
+See [Basic Auth and HTTPS](#basic-auth-and-https) for certificates and authentication.
 
 ### Export Missing, Empty, or Whitespace Values
 
@@ -977,7 +985,7 @@ The corresponding Elasticsearch/OpenSearch launchers are
 `generate_test_data_es.cmd` and `submit_to_es.cmd`. Each launcher uses
 `py.exe -3`, forwards all arguments, and returns the Python script's exit status.
 
-## Using HTTPS
+## Basic Auth and HTTPS
 
 HTTPS uses TLS (Transport Layer Security) to encrypt the connection and
 authenticate the server. Enabling HTTPS on Solr/ES is called configuring TLS.

@@ -17,3 +17,6 @@ run its launcher as `.\SCRIPT.cmd`; the `.\` prefix works in PowerShell and
 Command Prompt without putting the current directory on `PATH`. Each launcher
 uses `py.exe -3`, forwards all arguments, and returns the Python script's exit
 status.
+
+Both submission scripts accept `--recreate_collection` and `--recreate_index`
+as synonyms for recreating an empty `dq_demo` target without submitting data.
