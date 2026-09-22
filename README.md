@@ -1298,6 +1298,10 @@ sentinel value, or a retained copy of the original source document.
 
 ## Development and Custom Rules
 
+**[Watch Custom Rules on YouTube](https://youtu.be/5EIDdZr9dyg)**
+
+[![Watch Custom Rules on YouTube](docs/images/data-quality-custom-rules-thumbnail.png)](https://youtu.be/5EIDdZr9dyg)
+
 ### Requirements and Dependencies
 
 Required software:
